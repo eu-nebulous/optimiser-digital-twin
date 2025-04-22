@@ -19,3 +19,5 @@ build
 # Local development files
 /.dir-locals.el
 /.envrc
+optimiser-digital-twin/bin/
+optimiser-digital-twin/dist/
