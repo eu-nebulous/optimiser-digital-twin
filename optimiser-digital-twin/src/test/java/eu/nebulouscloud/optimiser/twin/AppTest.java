@@ -6,5 +6,24 @@ package eu.nebulouscloud.optimiser.twin;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
 class AppTest {
+
+    @Test void runAbs() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        PrintStream printStream = new PrintStream(outputStream);
+        PrintStream originalOut = System.out;
+        try {
+            System.setOut(printStream);
+            Hello.Main.main(new String[0]);
+        } finally {
+            System.setOut(originalOut);
+        }
+        // // TODO: fix capturing of output, then activate the test
+        // String output = outputStream.toString();
+        // assertEquals("Hello world!", output);
+    }
+
 }
