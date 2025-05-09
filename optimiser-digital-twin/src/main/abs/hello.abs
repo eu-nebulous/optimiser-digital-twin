@@ -1,0 +1,5 @@
+module Hello;
+
+{
+    println("Hello world!");
+}

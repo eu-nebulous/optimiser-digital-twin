@@ -27,12 +27,20 @@ repositories {
     }
 }
 
+// Use Gradle's cache directory for downloaded files
+ext {
+    absToolsDir = new File("${gradle.gradleUserHomeDir}/caches/abstools")
+}
+
 dependencies {
     // JSON parsing, also used by the data classes defined in sal-common:
     // https://github.com/FasterXML/jackson
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
     // Command-line parsing: https://picocli.info
-    implementation 'info.picocli:picocli:4.7.7'
+    implementation ('info.picocli:picocli:4.7.7')
+
+    // The ABS compiler
+    implementation files(new File(project.ext.absToolsDir, "absfrontend.jar"))
 
     // Logging: SLF4J (implemented by Logback)
     implementation 'ch.qos.logback:logback-classic:1.5.18'
@@ -46,10 +54,86 @@ dependencies {
         changing = true
     }
 
-
     // Use JUnit Jupiter for testing.
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
+}
+
+task downloadAbsFrontend {
+    description 'Downloads the latest absfrontend.jar from GitHub releases'
+    def taskAbsToolsDir = project.ext.absToolsDir
+    def taskAbsDownloadsDir = new File(taskAbsToolsDir, "/downloads")
+
+    doLast {
+        logger.lifecycle("Checking for latest absfrontend.jar...")
+        taskAbsDownloadsDir.mkdirs()
+        def apiUrl = new java.net.URL("https://api.github.com/repos/abstools/abstools/releases/latest")
+        def connection = apiUrl.openConnection()
+        // GitHub API may require a User-Agent header
+        connection.setRequestProperty("User-Agent", "Gradle Build")
+
+        def jsonText = connection.getInputStream().getText()
+        def json = new groovy.json.JsonSlurper().parseText(jsonText)
+        def version = json.tag_name.toString()
+        if (version.startsWith('v')) {
+            version = version.substring(1)  // Remove 'v' prefix if present
+        }
+        def jarAsset = json.assets.find { it.name == "absfrontend.jar" }
+        if (jarAsset) {
+            def versionedJarName = "absfrontend-${version}.jar"
+            def versionedJarFile = new File(taskAbsDownloadsDir, versionedJarName)
+            def jarFile = new File(taskAbsToolsDir, "absfrontend.jar")
+            if (versionedJarFile.exists()) {
+                logger.lifecycle("Version ${version} already downloaded at ${versionedJarFile.absolutePath}")
+            } else {
+                def downloadUrl = jarAsset.browser_download_url
+                logger.lifecycle("Found latest version ${version} at: ${downloadUrl}")
+                // Delete any previous absfrontend jar files
+                taskAbsDownloadsDir.listFiles().each { file ->
+                    if (file.name.startsWith("absfrontend-") && file.name.endsWith(".jar")) {
+                        logger.lifecycle("Deleting old version: ${file.name}")
+                        file.delete()
+                    }
+                }
+                def jarConnection = new java.net.URL(downloadUrl).openConnection()
+                jarConnection.setRequestProperty("User-Agent", "Gradle Build")
+                try (def inputStream = jarConnection.getInputStream()) {
+                    java.nio.file.Files.copy(inputStream, versionedJarFile.toPath(),
+                                             java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+                logger.lifecycle("Successfully downloaded absfrontend.jar version ${version} to ${versionedJarFile.absolutePath}")
+            }
+            java.nio.file.Files.copy(versionedJarFile.toPath(), jarFile.toPath(),
+                                     java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            logger.lifecycle("Copied ${versionedJarFile.absolutePath} to ${jarFile.absolutePath}")
+        } else {
+            throw new GradleException("Could not find absfrontend.jar in the latest release")
+        }
+    }
+}
+
+// Compile ABS
+task compileAbs(type: Exec, dependsOn: downloadAbsFrontend) {
+    description = 'Compiles ABS.'
+    inputs.dir 'src/main/abs'
+    outputs.dir 'build/abs'
+   commandLine 'java', '-jar', project.ext.absToolsDir.toString() + '/absfrontend.jar', '--java', '-d', 'build/abs/',
+        *fileTree(dir: 'src/main/abs', include: '**/*.abs').collect { it.absolutePath }
+}
+
+// Also, add build/abs to the runtime classpath
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/abs'
+        }
+        runtimeClasspath += files('build/abs')
+    }
+}
+
+tasks.withType(JavaCompile) {
+    dependsOn compileAbs
+    source('build/abs')
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
@@ -74,7 +158,6 @@ jar {
 
 shadowJar {
     // Creates a fat jar, including all dependencies
-
 }
 
 task distJar(type: Copy, dependsOn: shadowJar) {
