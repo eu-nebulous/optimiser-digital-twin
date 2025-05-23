@@ -14,17 +14,15 @@ plugins {
 }
 
 repositories {
-    // Use Maven Central for resolving dependencies.
+    maven {
+        name = 'Central Portal Snapshots'
+        url = 'https://central.sonatype.com/repository/maven-snapshots/'
+        // Only search this repository for the specific dependency
+        content {
+            includeModule("io.github.eu-nebulous", "exn-connector-java")
+        }
+    }
     mavenCentral()
-    // 7bulls, activeeon maven repositories for SAL
-    maven {
-        url = 'http://repository.activeeon.com/content/groups/proactive/'
-        allowInsecureProtocol = true
-    }
-    // NebulOuS-developed components
-    maven {
-        url = 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
-    }
 }
 
 // Use Gradle's cache directory for downloaded files
@@ -48,8 +46,7 @@ dependencies {
     implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
 
     // the EXN Middleware:
-    // https://openproject.nebulouscloud.eu/projects/nebulous-collaboration-hub/wiki/asynchronous-messaging-specification
-    implementation('eu.nebulouscloud:exn-connector-java:1.0-SNAPSHOT') {
+    implementation('io.github.eu-nebulous:exn-connector-java:1.0-SNAPSHOT') {
         exclude group: 'org.slf4j', module: 'slf4j-simple'
         changing = true
     }
@@ -117,7 +114,7 @@ task compileAbs(type: Exec, dependsOn: downloadAbsFrontend) {
     description = 'Compiles ABS.'
     inputs.dir 'src/main/abs'
     outputs.dir 'build/abs'
-   commandLine 'java', '-jar', project.ext.absToolsDir.toString() + '/absfrontend.jar', '--java', '-d', 'build/abs/',
+    commandLine 'java', '-jar', project.ext.absToolsDir.toString() + '/absfrontend.jar', '--java', '-d', 'build/abs/', '--sourceonly',
         *fileTree(dir: 'src/main/abs', include: '**/*.abs').collect { it.absolutePath }
 }
 
