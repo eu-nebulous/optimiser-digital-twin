@@ -21,3 +21,9 @@ build
 /.envrc
 optimiser-digital-twin/bin/
 optimiser-digital-twin/dist/
+
+# generated files
+/config.db
+# generated files when manually compiling the abs model
+/optimiser-digital-twin/src/main/abs/gen/
+/optimiser-digital-twin/src/main/abs/*.jar
