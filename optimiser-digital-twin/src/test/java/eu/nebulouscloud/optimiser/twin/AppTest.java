@@ -17,7 +17,7 @@ class AppTest {
         PrintStream originalOut = System.out;
         try {
             System.setOut(printStream);
-            Hello.Main.main(new String[0]);
+            Twin.Main.main(new String[0]);
         } finally {
             System.setOut(originalOut);
         }
