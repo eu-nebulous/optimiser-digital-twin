@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParseResult;
 import picocli.CommandLine.ScopeType;
 
@@ -24,33 +25,16 @@ import picocli.CommandLine.ScopeType;
     sortOptions = false,
     separator = " ",
     showAtFileInUsageHelp = true,
-    description = "Evaluate deployment scenarios.")
+    description = "Evaluate deployment scenarios",
+    subcommands = {
+        Server.class,
+        DeploymentImporter.class,
+        TraceImporter.class,
+        Simulator.class
+    }
+)
 @Slf4j
 public class App implements Callable<Integer> {
-
-    @Option(names = {"--activemq-host"},
-            description = "The hostname of the ActiveMQ server.  Can also be set via the @|bold ACTIVEMQ_HOST|@ environment variable.",
-            paramLabel = "ACTIVEMQ_HOST",
-            defaultValue = "${ACTIVEMQ_HOST:-localhost}")
-    private String activemq_host;
-
-    @Option(names = {"--activemq-port"},
-            description = "The port of the ActiveMQ server.  Can also be set via the @|bold ACTIVEMQ_PORT|@ environment variable.",
-            paramLabel = "ACTIVEMQ_PORT",
-            defaultValue = "${ACTIVEMQ_PORT:-5672}")
-    private int activemq_port;
-
-    @Option(names = {"--activemq-user"},
-            description = "The user name for the ActiveMQ server. Can also be set via the @|bold ACTIVEMQ_USER|@ environment variable.",
-            paramLabel = "ACTIVEMQ_USER",
-            defaultValue = "${ACTIVEMQ_USER}")
-    private String activemq_user;
-
-    @Option(names = {"--activemq-password"},
-            description = "The password for the ActiveMQ server. Can also be set via the @|bold ACTIVEMQ_PASSWORD|@ environment variable.",
-            paramLabel = "ACTIVEMQ_PASSWORD",
-            defaultValue = "${ACTIVEMQ_PASSWORD}")
-    private String activemq_password;
 
     @Option(names = {"--verbose", "-v"},
             description = "Turn on more verbose logging output. Can be given multiple times. When not given, print only warnings and error messages. With @|underline -v|@, print status messages. With @|underline -vvv|@, print everything.",
@@ -63,14 +47,6 @@ public class App implements Callable<Integer> {
             defaultValue = "${LOGDIR}")
     @Getter
     private static Path logDirectory;
-
-    /**
-     * The ActiveMQ connector.
-     *
-     * @return the ActiveMQ connector wrapper, or null if running offline.
-     */
-    @Getter
-    private static ExnConnector activeMQConnector = null;
 
     /**
      * PicoCLI execution strategy that uses common initialization.
@@ -101,7 +77,7 @@ public class App implements Callable<Integer> {
                     case 1: logbackLogger.setLevel(ch.qos.logback.classic.Level.INFO); break;
                     case 2: logbackLogger.setLevel(ch.qos.logback.classic.Level.DEBUG); break;
                     case 3: logbackLogger.setLevel(ch.qos.logback.classic.Level.TRACE); break;
-                    default: logbackLogger.setLevel(ch.qos.logback.classic.Level.ALL); break;
+                    default: logbackLogger.setLevel(ch.qos.logback.classic.Level.TRACE); break;
                 }
             }
         }
@@ -124,16 +100,6 @@ public class App implements Callable<Integer> {
                 log.info("Logging all messages to directory {}", logDirectory);
             }
         }
-        // Start connection to ActiveMQ if possible.
-        if (activemq_user != null && activemq_password != null) {
-            log.info("Preparing ActiveMQ connection: host={} port={}",
-                activemq_host, activemq_port);
-            activeMQConnector
-              = new ExnConnector(activemq_host, activemq_port,
-                  activemq_user, activemq_password);
-        } else {
-            log.debug("ActiveMQ login info not set, only operating locally.");
-        }
     }
 
     /**
@@ -143,8 +109,11 @@ public class App implements Callable<Integer> {
      */
     @Override
     public Integer call() {
-        log.info("I'm being logged.");
-        System.out.println("Hello world!");
+        // 1. Read traces file
+        // 2. Create traces.db
+        // 3. Read solver message file
+        // 4. Create config.db
+        // 5. Run simulation
         return 0;
     }
 
@@ -157,7 +126,7 @@ public class App implements Callable<Integer> {
     public static void main(final String[] args) {
         final App app = new App();
         final int exitCode = new CommandLine(app)
-                .setExecutionStrategy(app::executionStrategy) // perform common initialization
+            .setExecutionStrategy(app::executionStrategy) // perform common initialization
             .execute(args);
         System.exit(exitCode);
     }
