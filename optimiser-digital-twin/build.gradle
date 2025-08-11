@@ -2,7 +2,7 @@ plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     id 'application'
     // This plugin creates a self-contained jar file including all dependencies
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '8.3.9'
     // Use this to check for newer versions of dependency libraries via
     // ./gradlew dependencyUpdates
     id "com.github.ben-manes.versions" version "0.52.0"
@@ -10,7 +10,7 @@ plugins {
     // rlwrap ./gradlew --console plain jshell
     id "com.github.mrsarm.jshell.plugin" version "1.2.1"
     // https://docs.freefair.io/gradle-plugins/8.4/reference/#_lombok
-    id "io.freefair.lombok" version "8.13.1"
+    id "io.freefair.lombok" version "8.14"
 }
 
 repositories {
