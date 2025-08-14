@@ -16,7 +16,7 @@
  * deployment scenario.
  * </ul>
  *
- * <p>The main entry point is the class {@link App}.  The class {@link
+ * <p>The main entry point is the class {@link Main}.  The class {@link
  * ExnConnector} implements communication with the rest of the Nebulous system
  * by setting up the necessary publishers and message handlers to send and
  * receive ActiveMQ messages.

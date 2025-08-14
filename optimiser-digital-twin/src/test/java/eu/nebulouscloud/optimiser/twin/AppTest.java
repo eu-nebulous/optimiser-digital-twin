@@ -4,12 +4,27 @@
 package eu.nebulouscloud.optimiser.twin;
 
 import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 class AppTest {
+
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper yaml_mapper = new ObjectMapper(new YAMLFactory());
 
     @Test void runAbs() throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -24,6 +39,27 @@ class AppTest {
         // // TODO: fix capturing of output, then activate the test
         // String output = outputStream.toString();
         // assertEquals("Hello world!", output);
+    }
+
+    @Test void parseDSLMessage() throws IOException, URISyntaxException {
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+        JsonNode dslMessage = mapper.readTree(resourceURL);
+        NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
+        assertNotNull(app);
+        String uuid = app.getUuid();
+        assertNotNull(NebulousApp.fromUuid(uuid));
+    }
+
+    @Test void parseDSLandSolverMessages() throws IOException {
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+        JsonNode dslMessage = mapper.readTree(resourceURL);
+        NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
+        assertNotNull(app);
+        URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-complex.json");
+        JsonNode solutionMessage = mapper.readTree(solutionURL);
+        assertTrue(solutionMessage.isObject());
+        ObjectNode replacements = solutionMessage.withObject("VariableValues");
+        
     }
 
 }

@@ -19,7 +19,7 @@ public class Server implements Callable<Integer> {
     /** Reference to main app set up by PicoCLI.  This lets us ask for the
       * ActiveMQ connector. */
     @ParentCommand
-    private App app;
+    private Main app;
 
     @Option(names = {"--activemq-host"},
             description = "The hostname of the ActiveMQ server.  Can also be set via the @|bold ACTIVEMQ_HOST|@ environment variable.",
