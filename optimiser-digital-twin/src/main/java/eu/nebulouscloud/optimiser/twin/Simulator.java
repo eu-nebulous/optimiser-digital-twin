@@ -13,7 +13,7 @@ import picocli.CommandLine.ParentCommand;
 public class Simulator implements Callable<Integer> {
 
     @ParentCommand
-    private App app;
+    private Main app;
 
     @Override
     public Integer call() throws Exception {

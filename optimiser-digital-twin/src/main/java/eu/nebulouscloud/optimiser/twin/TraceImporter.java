@@ -15,7 +15,7 @@ import picocli.CommandLine.ParentCommand;
 public class TraceImporter implements Callable<Integer> {
 
     @ParentCommand
-    private App app;
+    private Main app;
 
     @Parameters(description = "A file containing trace logs")
     private Path traceFile;

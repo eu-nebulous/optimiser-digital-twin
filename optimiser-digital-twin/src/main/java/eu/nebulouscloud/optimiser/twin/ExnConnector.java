@@ -168,7 +168,7 @@ public class ExnConnector {
                 final JsonNode appMessage = mapper.valueToTree(body);
                 final String appID = appMessage.at("/uuid").asText();
                 MDC.put("appId", appID);
-                App.logFile("app-message-" + appID + ".json", appMessage.toPrettyString());
+                Main.logFile("app-message-" + appID + ".json", appMessage.toPrettyString());
                 // TODO: initialize twin with list of components.  Don't
                 // calculate the initial deployment, we'll wait for the
                 // synthetic solver solution message from the
@@ -208,7 +208,7 @@ public class ExnConnector {
                 }
                 MDC.put("appId", appId);
                 final JsonNode appMessage = mapper.valueToTree(body);
-                App.logFile("performance-indicators-" + appIdObject + ".json", appMessage.toPrettyString());
+                Main.logFile("performance-indicators-" + appIdObject + ".json", appMessage.toPrettyString());
                 // TODO: do we need to process this message?
             } catch (final Exception e) {
                 log.error("Error while processing solver solutions message", e);
@@ -236,7 +236,7 @@ public class ExnConnector {
                     return;
                 }
                 MDC.put("appId", app_id);
-                App.logFile("solver-solution-" + app_id + ".json", json_body.toPrettyString());
+                Main.logFile("solver-solution-" + app_id + ".json", json_body.toPrettyString());
                 // Three cases here:
                 // - The initial synthetic solution: initialize twin, start
                 //   calibrating

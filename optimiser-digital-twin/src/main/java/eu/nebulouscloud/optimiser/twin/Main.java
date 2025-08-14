@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParseResult;
 import picocli.CommandLine.ScopeType;
 
@@ -34,7 +33,7 @@ import picocli.CommandLine.ScopeType;
     }
 )
 @Slf4j
-public class App implements Callable<Integer> {
+public class Main implements Callable<Integer> {
 
     @Option(names = {"--verbose", "-v"},
             description = "Turn on more verbose logging output. Can be given multiple times. When not given, print only warnings and error messages. With @|underline -v|@, print status messages. With @|underline -vvv|@, print everything.",
@@ -82,7 +81,7 @@ public class App implements Callable<Integer> {
             }
         }
 
-        log.debug("Beginning common startup of twin");
+        log.info("Beginning common startup of twin");
         // Set up directory for file logs (dumps of contents of incoming or
         // outgoing messages).
         if (logDirectory != null) {
@@ -124,7 +123,7 @@ public class App implements Callable<Integer> {
      * @param args the command-line parameters as passed by the user
      */
     public static void main(final String[] args) {
-        final App app = new App();
+        final Main app = new Main();
         final int exitCode = new CommandLine(app)
             .setExecutionStrategy(app::executionStrategy) // perform common initialization
             .execute(args);
@@ -142,7 +141,7 @@ public class App implements Callable<Integer> {
      *  converted to a String via `toString`.
      */
     public static void logFile(final String name, final Object contents) {
-        if (App.logDirectory == null) return;
+        if (Main.logDirectory == null) return;
         final String prefix = LocalDateTime.now().toString()
             .replace(":", "-"); // make Windows less unhappy
         final Path path = logDirectory.resolve(prefix + "--" + name);
