@@ -14,6 +14,8 @@ import java.util.concurrent.Callable;
 
 import org.slf4j.MDC;
 
+import com.fasterxml.jackson.core.JsonPointer;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -32,10 +34,10 @@ public class DeploymentImporter implements Callable<Integer> {
     private Main app;
 
     @Parameters(description = "A file containing the app creation message")
-    private Path appCreationMessage;
+    private Path appCreationMessageFile;
 
     @Parameters(description = "A file containing a solver message with machine configurations")
-    private Path configurationFile;
+    private Path solverSolutionFile;
 
     @Parameters(description = "The database file to be created")
     private Path dbFile = Path.of("config.db");
@@ -43,62 +45,83 @@ public class DeploymentImporter implements Callable<Integer> {
     @Override
     public Integer call() {
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode message = null;
+        NebulousApp app = null;
+        JsonNode appMessage = null;
+        JsonNode solverSolution = null;
         try {
-            message = mapper.readTree(Files.readString(configurationFile, StandardCharsets.UTF_8));
+            appMessage = mapper.readTree(Files.readString(appCreationMessageFile, StandardCharsets.UTF_8));
         } catch (IOException e) {
-            log.error("Could not read solver solution file: {}", configurationFile);
+            log.error("Could not read app creation message file: {}", appCreationMessageFile);
             return 1;
         }
-        boolean success = saveSolverSolution(message, dbFile);
+        try {
+	    app = NebulousApp.fromAppMessage(appMessage);
+	} catch (JsonProcessingException e) {
+            log.error("Could not parse app creation message", e);
+            return 1;
+	}
+        try {
+	    solverSolution = mapper.readTree(Files.readString(solverSolutionFile, StandardCharsets.UTF_8));
+	} catch (IOException e) {
+            log.error("Could not read solver solution file: {}", solverSolutionFile);
+	}
+        boolean success = saveSolverSolution(app, solverSolution, dbFile);
         return success ? 0 : 1;
     }
 
 
+    /** Location of the deploy flag in the solver solution message */
+    private static final JsonPointer deployPath = JsonPointer.compile("/DeploySolution");
+    /** Location of the solution variables in the solver solution message */
+    private static final JsonPointer variablesPath = JsonPointer.compile("/VariableValues");
 
-    private static final String DEPLOY_PROPERTY = "DeploySolution";
-    private static final String VARIABLEVALUES_PROPERTY = "VariableValues";
 
-
-    public static boolean saveSolverSolution(JsonNode solution, Path dbName) {
-        if (solution.at("/application").isMissingNode()) {
+    public static boolean saveSolverSolution(NebulousApp app, JsonNode solution, Path dbName) {
+        JsonNode solutionId = solution.at("/application");
+        if (solutionId.isMissingNode()) {
             log.error("Solver solution does not contain 'application' property, aborting");
             return false;
         }
+        if (!solutionId.asText().equals(app.getUuid())) {
+            log.error("Tried to apply solver solution for app id {} to application with app id {}, aborting",
+                solutionId.asText(), app.getUuid());
+        }
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbName);
-             Statement statement = connection.createStatement();
-             PreparedStatement insert = connection.prepareStatement("INSERT INTO scenario(component, cpu, memory) VALUES (?, ?, ?)");
-        ) {
-            String app_id = solution.at("/application").toString(); // should be string already, but don't want to cast
-            MDC.pushByKey("appId", app_id);
+             Statement statement = connection.createStatement()) {
+            MDC.pushByKey("appId", app.getUuid());
 
-            if (!solution.has(DEPLOY_PROPERTY)) {
-                log.warn("Received solver solution without DeploySolution field, ignoring.");
-                return false;
-            }
-            if (!solution.at("/DeploySolution").asBoolean(false)) {
-                // `asBoolean` returns its argument if node is missing or cannot
-                // be converted to Boolean
-                log.info("Received solver solution with DeploySolution=false, ignoring.");
-                return false;
-            }
             statement.executeUpdate("DROP TABLE IF EXISTS scenario");
+            statement.executeUpdate("""
+                CREATE TABLE scenario (
+                  component STRING,
+                  cpu NUMBER,
+                  memory NUMBER,
+                  replicas NUMBER)
+                """);
 
-            ObjectNode variableValues = solution.withObjectProperty(VARIABLEVALUES_PROPERTY);
-            for (Map.Entry<String, JsonNode> entry : variableValues.properties()) {
-                String key = entry.getKey();
-                JsonNode replacementValue = entry.getValue();
-                // TODO: parse app creation message first; find component name
-                // etc. there
-                insert.setString(1, "foo");
-                insert.setLong(2, 1);
-                insert.setLong(3, 1);
-                insert.addBatch();
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO scenario (component, cpu, memory, replicas)
+                    VALUES (?, ?, ?, ?)
+                    """)) {
+                ObjectNode variableValues = solution.withObject(variablesPath);
+                ObjectNode rewrittenKubevela = app.rewriteKubevelaWithSolution(variableValues);
+                Map<String, Integer> replicas = KubevelaAnalyzer.getNodeCount(rewrittenKubevela);
+                for (JsonNode c : KubevelaAnalyzer.getNodeComponents(rewrittenKubevela).values()) {
+                    String componentName = c.at("/name").asText();
+                    long cpu = KubevelaAnalyzer.getCpuRequirement(c, componentName);
+                    long memory = KubevelaAnalyzer.getMemoryRequirement(c, componentName);
+                    int nreplicas = replicas.getOrDefault(componentName, 1);
+                    insert.setString(1, componentName);
+                    insert.setLong(2, cpu);
+                    insert.setLong(3, memory);
+                    insert.setLong(4, nreplicas);
+                    insert.addBatch();
+                }
+                int[] results = insert.executeBatch();
+                log.info("Created {} entries in database {}", results.length, dbName);
             }
-            int[] results = insert.executeBatch();
-            log.info("Created {} entries in database {}", results.length, dbName);
         } catch (SQLException e) {
-            log.error("Could not open database {}", dbName);
+            log.error("Could not create database", e);
             return false;
 	} finally {
             MDC.popByKey("appId");

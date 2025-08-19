@@ -10,7 +10,7 @@ plugins {
     // rlwrap ./gradlew --console plain jshell
     id "com.github.mrsarm.jshell.plugin" version "1.2.1"
     // https://docs.freefair.io/gradle-plugins/8.4/reference/#_lombok
-    id "io.freefair.lombok" version "8.14"
+    id "io.freefair.lombok" version "8.14.2"
 }
 
 repositories {

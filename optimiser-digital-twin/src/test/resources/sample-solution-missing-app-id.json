@@ -1,5 +1,4 @@
 {
-    "application": "419c5ac2-e8cb-4115-8aa1-27d41ba0a08e",
     "VariableValues": {
         "spec_components_0_traits_0_properties_replicas": 8,
         "spec_components_0_properties_requests_cpu": 3.5,
