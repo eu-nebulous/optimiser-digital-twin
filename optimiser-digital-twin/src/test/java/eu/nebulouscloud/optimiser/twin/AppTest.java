@@ -3,28 +3,46 @@
  */
 package eu.nebulouscloud.optimiser.twin;
 
-import org.junit.jupiter.api.Test;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 class AppTest {
 
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final ObjectMapper yaml_mapper = new ObjectMapper(new YAMLFactory());
+
+    // Set the current directory for ABS to find its databases during testing
+    @TempDir Path tempDir;
+    private String originalUserDir;
+
+    @BeforeEach
+    void setUp() {
+        originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+    }
+
+    @AfterEach
+    void tearDown() {
+        System.setProperty("user.dir", originalUserDir);
+    }
 
     @Test void runAbs() throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -50,6 +68,16 @@ class AppTest {
         assertNotNull(NebulousApp.fromUuid(uuid));
     }
 
+    @Test void invalidSolverSolution() throws IOException {
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+        JsonNode dslMessage = mapper.readTree(resourceURL);
+        NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
+        assertNotNull(app);
+        URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-missing-app-id.json");
+        JsonNode solutionMessage = mapper.readTree(solutionURL);
+        assertFalse(DeploymentImporter.saveSolverSolution(app, solutionMessage, Path.of("config.db")));
+    }
+
     @Test void parseDSLandSolverMessages() throws IOException {
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
         JsonNode dslMessage = mapper.readTree(resourceURL);
@@ -57,9 +85,7 @@ class AppTest {
         assertNotNull(app);
         URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-complex.json");
         JsonNode solutionMessage = mapper.readTree(solutionURL);
-        assertTrue(solutionMessage.isObject());
-        ObjectNode replacements = solutionMessage.withObject("VariableValues");
-        
+        assertTrue(DeploymentImporter.saveSolverSolution(app, solutionMessage, Path.of("config.db")));
     }
-
+    
 }

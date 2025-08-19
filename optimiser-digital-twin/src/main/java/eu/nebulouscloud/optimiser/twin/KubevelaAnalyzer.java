@@ -1,18 +1,6 @@
 package eu.nebulouscloud.optimiser.twin;
 
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-
-import eu.nebulouscloud.optimiser.twin.sal.AttributeRequirement;
-import eu.nebulouscloud.optimiser.twin.sal.Requirement;
-import eu.nebulouscloud.optimiser.twin.sal.RequirementOperator;
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +9,17 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+
+import eu.nebulouscloud.optimiser.twin.sal.AttributeRequirement;
+import eu.nebulouscloud.optimiser.twin.sal.Requirement;
+import eu.nebulouscloud.optimiser.twin.sal.RequirementOperator;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * A collection of methods to extract node requirements from KubeVela files.
@@ -251,7 +250,7 @@ public class KubevelaAnalyzer {
      * @return an integer of number of cores required, or -1 in case of no
      *  requirement.
      */
-    private static long getCpuRequirement(JsonNode c, String componentName) {
+    public static long getCpuRequirement(JsonNode c, String componentName) {
         JsonNode cpu = c.at("/properties/cpu");
         if (cpu.isMissingNode()) cpu = c.at("/properties/resources/requests/cpu");
         if (cpu.isMissingNode()) cpu = c.at("/properties/requests/cpu");
