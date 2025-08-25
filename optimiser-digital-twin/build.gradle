@@ -149,7 +149,7 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = 'eu.nebulouscloud.optimiser.twin.App'
+    mainClass = 'eu.nebulouscloud.optimiser.twin.Main'
 }
 
 jar {
