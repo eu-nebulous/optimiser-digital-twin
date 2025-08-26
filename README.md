@@ -34,5 +34,7 @@ and solver solution by running the following command (after building the
 project):
 
 ```sh
-java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-deployment optimiser-digital-twin/src/test/resources/app-creation-message.json optimiser-digital-twin/src/test/resources/sample-solution.json scenario.db
+java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar \
+import-deployment scenario.db \ optimiser-digital-twin/src/test/resources/app-creation-message.json \
+--solution optimiser-digital-twin/src/test/resources/sample-solution.json
 ```
