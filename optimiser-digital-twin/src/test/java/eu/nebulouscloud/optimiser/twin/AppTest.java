@@ -81,10 +81,10 @@ class AppTest {
         assertNotNull(app);
         URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-missing-app-id.json");
         JsonNode solutionMessage = mapper.readTree(solutionURL);
-        assertFalse(DeploymentImporter.saveSolverSolution(app, solutionMessage, Path.of("config.db")));
+        assertFalse(DeploymentImporter.saveSolverSolution(Path.of("config.db"), app, solutionMessage));
     }
 
-    @Test void parseDSLandSolverMessages() throws IOException, SQLException {
+    @Test void createScenarioFromDSLandSolverMessage() throws IOException, SQLException {
         Path db = Path.of(tempDir.toString(), "config.db");
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
         JsonNode dslMessage = mapper.readTree(resourceURL);
@@ -92,7 +92,7 @@ class AppTest {
         assertNotNull(app);
         URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution.json");
         JsonNode solutionMessage = mapper.readTree(solutionURL);
-        assertTrue(DeploymentImporter.saveSolverSolution(app, solutionMessage, db));
+        assertTrue(DeploymentImporter.saveSolverSolution(db, app, solutionMessage));
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
              Statement statement = connection.createStatement()) {
             ResultSet result = statement.executeQuery(
@@ -102,6 +102,26 @@ class AppTest {
             assertEquals(4, result.getInt(2));    // cpu
             assertEquals(4096, result.getInt(3)); // memory
             assertEquals(8, result.getInt(4));    // replicas
+            assertFalse(result.next());
+        }
+    }
+
+    @Test void createScenarioFromDSLMessage() throws IOException, SQLException {
+        Path db = Path.of(tempDir.toString(), "config.db");
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
+        JsonNode dslMessage = mapper.readTree(resourceURL);
+        NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
+        assertNotNull(app);
+        assertTrue(DeploymentImporter.saveSolverSolution(db, app, null));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT * FROM scenario WHERE component = 'license-plate-reading-service'");
+            assertTrue(result.next());
+            assertEquals("license-plate-reading-service", result.getString(1)); // component
+            assertEquals(2, result.getInt(2));    // cpu
+            assertEquals(1024, result.getInt(3)); // memory
+            assertEquals(1, result.getInt(4));    // replicas
             assertFalse(result.next());
         }
     }
