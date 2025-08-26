@@ -3,6 +3,7 @@
  */
 package eu.nebulouscloud.optimiser.twin;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -12,7 +13,13 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +28,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 class AppTest {
@@ -60,7 +66,7 @@ class AppTest {
     }
 
     @Test void parseDSLMessage() throws IOException, URISyntaxException {
-        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
         JsonNode dslMessage = mapper.readTree(resourceURL);
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
@@ -69,7 +75,7 @@ class AppTest {
     }
 
     @Test void invalidSolverSolution() throws IOException {
-        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
         JsonNode dslMessage = mapper.readTree(resourceURL);
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
@@ -78,14 +84,25 @@ class AppTest {
         assertFalse(DeploymentImporter.saveSolverSolution(app, solutionMessage, Path.of("config.db")));
     }
 
-    @Test void parseDSLandSolverMessages() throws IOException {
-        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message-complex.json");
+    @Test void parseDSLandSolverMessages() throws IOException, SQLException {
+        Path db = Path.of(tempDir.toString(), "config.db");
+        URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
         JsonNode dslMessage = mapper.readTree(resourceURL);
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
-        URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-complex.json");
+        URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution.json");
         JsonNode solutionMessage = mapper.readTree(solutionURL);
-        assertTrue(DeploymentImporter.saveSolverSolution(app, solutionMessage, Path.of("config.db")));
+        assertTrue(DeploymentImporter.saveSolverSolution(app, solutionMessage, db));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT * FROM scenario WHERE component = 'license-plate-reading-service'");
+            assertTrue(result.next());
+            assertEquals("license-plate-reading-service", result.getString(1)); // component
+            assertEquals(4, result.getInt(2));    // cpu
+            assertEquals(4096, result.getInt(3)); // memory
+            assertEquals(8, result.getInt(4));    // replicas
+            assertFalse(result.next());
+        }
     }
-    
 }
