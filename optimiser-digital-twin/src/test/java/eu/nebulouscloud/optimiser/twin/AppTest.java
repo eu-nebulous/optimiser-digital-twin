@@ -8,11 +8,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -20,6 +24,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,4 +130,22 @@ class AppTest {
             assertFalse(result.next());
         }
     }
+
+    @Test void readTrace() throws IOException, SQLException {
+        Path db = Path.of(tempDir.toString(), "traces.db");
+        URL traceURL = AppTest.class.getClassLoader().getResource("logs.jsonl");
+        BufferedReader reader = new BufferedReader(
+            new InputStreamReader(traceURL.openStream(), StandardCharsets.UTF_8));
+        long nTraces = TraceImporter.importTraces(db, reader.lines().iterator());
+        assertEquals(48, nTraces);
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT COUNT(*) FROM trace_events");
+            assertTrue(result.next());
+            assertEquals(48, result.getLong(1));
+            assertFalse(result.next());
+        }
+    }
+
 }

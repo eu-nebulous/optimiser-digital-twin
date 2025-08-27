@@ -57,19 +57,19 @@ public class DeploymentImporter implements Callable<Integer> {
             return 1;
         }
         try {
-	    app = NebulousApp.fromAppMessage(appMessage);
-	} catch (JsonProcessingException e) {
+            app = NebulousApp.fromAppMessage(appMessage);
+        } catch (JsonProcessingException e) {
             log.error("Could not parse app creation message", e);
             return 1;
-	}
+        }
         try {
             if (solverSolutionFile.isPresent()) {
-	        solverSolution = mapper.readTree(Files.readString(solverSolutionFile.get(),
+                solverSolution = mapper.readTree(Files.readString(solverSolutionFile.get(),
                     StandardCharsets.UTF_8));
             }
-	} catch (IOException e) {
+        } catch (IOException e) {
             log.error("Could not read solver solution file: {}", solverSolutionFile);
-	}
+        }
         boolean success = saveSolverSolution(dbFile, app, solverSolution);
         return success ? 0 : 1;
     }
@@ -140,7 +140,7 @@ public class DeploymentImporter implements Callable<Integer> {
         } catch (SQLException e) {
             log.error("Could not create database", e);
             return false;
-	} finally {
+        } finally {
             MDC.popByKey("appId");
         }
         return true;
