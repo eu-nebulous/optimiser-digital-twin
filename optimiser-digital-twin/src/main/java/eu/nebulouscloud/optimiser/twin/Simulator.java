@@ -17,6 +17,11 @@ public class Simulator implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        // 1. Read traces file
+        // 2. Create traces.db
+        // 3. Read solver message file
+        // 4. Create config.db
+        // 5. Run simulation
         System.out.println("Running simulation ...");
         return 0;
     }

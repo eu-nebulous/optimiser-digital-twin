@@ -102,18 +102,13 @@ public class Main implements Callable<Integer> {
     }
 
     /**
-     * The main method of the main class.
-     *
-     * @return 0 if no error during execution, otherwise greater than 0
+     * The main method of the main class.  Shows the help text and returns
+     * with an error, so that scripts fail and someone checks what's up.
      */
     @Override
     public Integer call() {
-        // 1. Read traces file
-        // 2. Create traces.db
-        // 3. Read solver message file
-        // 4. Create config.db
-        // 5. Run simulation
-        return 0;
+        CommandLine.usage(this, System.out);
+        return 1;
     }
 
     /**
