@@ -1,20 +1,32 @@
+// A digital twin to replay recorded traces from the real system on varying
+// deployments, and emit traces in the same format.
+//
+// We use two databases, both of which must be present in the current directory:
+//
+// - `trace.db`: contains one table `trace_events`, can be created from a file
+//   of recorded traces by the `import-traces` sub-command.
+//
+// - `scenario.db`: contains one table `scenario`, can be created from an app
+//   creation message file and (optionally) a solver solution message file by
+//   the `import-deployment` sub-command.
+
 module Twin;
 import * from ABS.DC;
 
 // Database-related types
 
-data DBNode = DBNode(String nodeName, String nodeId, Int nodeCores);
+data DBNode = DBNode(String nodeName, Int nodeCpu, Int nodeMemory, Int nodeReplicas);
 
 def List<Int> minEventTime__() =
     builtin(sqlite3, "trace.db", "SELECT min(event_time) FROM trace_events");
 
 def Int minEventTime() = head(minEventTime__());
 
-// All components (nodes).  Note that remote-only nodes, e.g. a
-// database, have an empty string as id.
+// All components (nodes).  TODO: figure out what to do with remote-only
+// nodes, e.g. a database node that we don't instrument
 def List<DBNode> allNodes() =
-    builtin(sqlite3, "trace.db",
-            `SELECT name, replica_id, cores FROM components`);
+    builtin(sqlite3, "scenario.db",
+            `SELECT component, cpu, memory, replicas FROM scenario`);
 
 // all activity IDs
 def List<String> activities() =
@@ -129,7 +141,7 @@ def List<Event> incomingEventForOutgoing(Event out_event) =
 interface Component {
     Unit execute(Int cost);
 }
-class Component(String name, String id, Int nCores) implements Component {
+class Component(String name, Int replicaId) implements Component {
     Unit execute(Int cost) {
         [Cost: cost] skip;
     }
@@ -138,7 +150,7 @@ class Component(String name, String id, Int nCores) implements Component {
 interface Activity {
 }
 
-class Activity(String activityId, Map<Pair<String, String>, Component> components)
+class Activity(String activityId, Map<String, List<Component>> components)
     implements Activity
 {
     Int minEventTime = minEventTime();
@@ -158,6 +170,8 @@ class Activity(String activityId, Map<Pair<String, String>, Component> component
 
     Unit processEvent(Event event) {
         eventsInFlight = eventsInFlight + 1;
+        // TODO: generate Event from what actually happened; do not echo input
+        // trace here, otherwise we don't see the right ReplicaID values
         println(eventJsonl(event, minEventTime));
         switch (eventType(event)) {
             "out" => {
@@ -180,11 +194,13 @@ class Activity(String activityId, Map<Pair<String, String>, Component> component
                   then foldl((Event e, Int acc) => acc + eventTime(e) - eventTime(event))(resultingEvents, 0)
                     / length(resultingEvents)
                   else 0;
-                Maybe<Component> cl = lookup(components, Pair(eventLocalComponent(event), eventLocalId(event)));
+                List<Component> cl = lookupDefault(components, eventLocalComponent(event), Nil);
+                // Choose random replica for this component for now
+                Maybe<Component> c = when cl == Nil then Nothing else Just(nth(cl, random(length(cl))));
                 foreach (e in resultingEvents) {
                     Int t = eventTime(e) - eventTime(event);
-                    if (isJust(cl)) { // should always be true
-                        await fromJust(cl)!execute(t);
+                    if (isJust(c)) { // should always be true
+                        await fromJust(c)!execute(t);
                     }
                     this!processEvent(e);
                 }
@@ -195,20 +211,22 @@ class Activity(String activityId, Map<Pair<String, String>, Component> component
 }
 
 {
-    Map<Pair<String, String>, Component> components = map[];
-    foreach (node in allNodes()) {
-        Component component = null;
-        // TODO: use `config.db` database to obtain cores, memory (config.db
-        // will be generated from solver messages).  Component names and IDs
-        // will still come from the `trace.db` table.
-        if (nodeCores(node) > 0) {
-            DeploymentComponent dc = new DeploymentComponent(`$nodeName(node)$-$nodeId(node)$`, map[Pair(Speed, nodeCores(node) * 10)]);
-            [DC: dc]component = new Component(nodeName(node), nodeId(node), nodeCores(node));
-        } else {
-            DeploymentComponent dc = new DeploymentComponent(`$nodeName(node)$-$nodeId(node)$`, map[Pair(Speed, 1)]);
-            [DC: dc]component = new Component(nodeName(node), nodeId(node), nodeCores(node));
+    Map<String, List<Component>> components = map[];
+    foreach (nodetype in allNodes()) {
+        List<Component> nodeComponents = Nil;
+        foreach (nodeId in range(1, nodeReplicas(nodetype))) {
+            Component component = null;
+            if (nodeCpu(nodetype) > 0) {
+                DeploymentComponent dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, nodeCpu(nodetype) * 10)]);
+                [DC: dc]component = new Component(nodeName(nodetype), nodeId);
+            } else {
+                // TODO: unspecified node size, read node default values from somewhere
+                DeploymentComponent dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, 10)]);
+                [DC: dc]component = new Component(nodeName(nodetype), nodeId);
+            }
+            nodeComponents = Cons(component, nodeComponents);
         }
-        components = put(components, Pair(nodeName(node), nodeId(node)), component);
+        components = put(components, nodeName(nodetype), nodeComponents);
     }
     List<Activity> activityObjects = Nil;
     List<String> activities = activities();

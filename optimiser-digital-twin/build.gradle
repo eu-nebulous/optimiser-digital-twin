@@ -122,24 +122,24 @@ task downloadAbsFrontend {
 task compileAbs(type: Exec, dependsOn: downloadAbsFrontend) {
     description = 'Compiles ABS.'
     inputs.dir 'src/main/abs'
-    outputs.dir 'build/abs'
-    commandLine 'java', '-jar', project.ext.absToolsDir.toString() + '/absfrontend.jar', '--java', '-d', 'build/abs/', '--sourceonly',
+    outputs.dir 'build/generated-src/abs'
+    commandLine 'java', '-jar', project.ext.absToolsDir.toString() + '/absfrontend.jar', '--java', '-d', 'build/generated-src/abs/', '--sourceonly',
         *fileTree(dir: 'src/main/abs', include: '**/*.abs').collect { it.absolutePath }
 }
 
-// Also, add build/abs to the runtime classpath
+// Also, add build/generated-src/abs to the runtime classpath
 sourceSets {
     main {
         java {
-            srcDirs 'build/abs'
+            srcDirs 'build/generated-src/abs'
         }
-        runtimeClasspath += files('build/abs')
+        runtimeClasspath += files('build/generated-src/abs')
     }
 }
 
 tasks.withType(JavaCompile) {
     dependsOn compileAbs
-    source('build/abs')
+    source('build/generated-src/abs')
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
