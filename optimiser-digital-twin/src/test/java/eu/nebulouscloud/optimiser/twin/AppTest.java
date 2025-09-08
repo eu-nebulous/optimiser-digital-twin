@@ -9,94 +9,80 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.stream.Stream;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 class AppTest {
 
     private static final ObjectMapper mapper = new ObjectMapper();
-    private static final ObjectMapper yaml_mapper = new ObjectMapper(new YAMLFactory());
 
-    // Set the current directory for ABS to find its databases during testing
+    // A temporary current directory for ABS databases
     @TempDir Path tempDir;
-    private String originalUserDir;
-
-    @BeforeEach
-    void setUp() {
-        originalUserDir = System.getProperty("user.dir");
-        System.setProperty("user.dir", tempDir.toString());
-    }
-
-    @AfterEach
-    void tearDown() {
-        System.setProperty("user.dir", originalUserDir);
-    }
-
-    @Test void runAbs() throws Exception {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        PrintStream printStream = new PrintStream(outputStream);
-        PrintStream originalOut = System.out;
-        try {
-            System.setOut(printStream);
-            Twin.Main.main(new String[0]);
-        } finally {
-            System.setOut(originalOut);
-        }
-        // // TODO: fix capturing of output, then activate the test
-        // String output = outputStream.toString();
-        // assertEquals("Hello world!", output);
-    }
 
     @Test void parseDSLMessage() throws IOException, URISyntaxException {
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
-        JsonNode dslMessage = mapper.readTree(resourceURL);
+        JsonNode dslMessage = mapper.readTree(resourceURL.openStream());
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
         String uuid = app.getUuid();
         assertNotNull(NebulousApp.fromUuid(uuid));
     }
 
+    @Test
+    void runSimpleSimulation() throws Exception {
+        URL traceDbURL = AppTest.class.getClassLoader().getResource("simple-execution/trace.db");
+        URL scenarioDbURL = AppTest.class.getClassLoader().getResource("simple-execution/scenario.db");
+        Path traceDb = tempDir.resolve("trace.db");
+        Path scenarioDb = tempDir.resolve("scenario.db");
+        Files.copy(traceDbURL.openStream(), traceDb);
+        Files.copy(scenarioDbURL.openStream(), scenarioDb);
+        long nEvents = -1;
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + traceDb.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT COUNT(*) FROM trace_events");
+            assertTrue(result.next());
+            nEvents = result.getLong(1);
+            assertFalse(result.next());
+        }
+        String simulationResult = Simulator.simulate(traceDb, scenarioDb);
+        assertEquals(nEvents, simulationResult.lines().count());
+    }
+
     @Test void invalidSolverSolution() throws IOException {
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
-        JsonNode dslMessage = mapper.readTree(resourceURL);
+        JsonNode dslMessage = mapper.readTree(resourceURL.openStream());
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
         URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution-missing-app-id.json");
-        JsonNode solutionMessage = mapper.readTree(solutionURL);
+        JsonNode solutionMessage = mapper.readTree(solutionURL.openStream());
         assertFalse(DeploymentImporter.saveSolverSolution(Path.of("config.db"), app, solutionMessage));
     }
 
     @Test void createScenarioFromDSLandSolverMessage() throws IOException, SQLException {
         Path db = Path.of(tempDir.toString(), "config.db");
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
-        JsonNode dslMessage = mapper.readTree(resourceURL);
+        JsonNode dslMessage = mapper.readTree(resourceURL.openStream());
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
         URL solutionURL = AppTest.class.getClassLoader().getResource("sample-solution.json");
-        JsonNode solutionMessage = mapper.readTree(solutionURL);
+        JsonNode solutionMessage = mapper.readTree(solutionURL.openStream());
         assertTrue(DeploymentImporter.saveSolverSolution(db, app, solutionMessage));
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
              Statement statement = connection.createStatement()) {
@@ -114,7 +100,7 @@ class AppTest {
     @Test void createScenarioFromDSLMessage() throws IOException, SQLException {
         Path db = Path.of(tempDir.toString(), "config.db");
         URL resourceURL = AppTest.class.getClassLoader().getResource("app-creation-message.json");
-        JsonNode dslMessage = mapper.readTree(resourceURL);
+        JsonNode dslMessage = mapper.readTree(resourceURL.openStream());
         NebulousApp app = NebulousApp.fromAppMessage(dslMessage);
         assertNotNull(app);
         assertTrue(DeploymentImporter.saveSolverSolution(db, app, null));
