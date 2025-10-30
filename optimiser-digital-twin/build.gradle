@@ -1,16 +1,18 @@
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     id 'application'
-    // This plugin creates a self-contained jar file including all dependencies
+    // This plugin creates a self-contained jar file including all
+    // dependencies.  Staying at version 8.3.9 for now until we can diagnose
+    // the build failure with versions >=9.0.0
     id 'com.gradleup.shadow' version '8.3.9'
     // Use this to check for newer versions of dependency libraries via
     // ./gradlew dependencyUpdates
-    id "com.github.ben-manes.versions" version "0.52.0"
+    id "com.github.ben-manes.versions" version "0.53.0"
     // add jshell support (https://github.com/mrsarm/jshell-plugin):
     // rlwrap ./gradlew --console plain jshell
     id "com.github.mrsarm.jshell.plugin" version "1.2.1"
     // https://docs.freefair.io/gradle-plugins/8.4/reference/#_lombok
-    id "io.freefair.lombok" version "8.14.2"
+    id "io.freefair.lombok" version "9.0.0"
 }
 
 repositories {
@@ -33,9 +35,9 @@ ext {
 dependencies {
     // JSON parsing, also used by the data classes defined in sal-common:
     // https://github.com/FasterXML/jackson
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.0'
     // YAML parsing: https://github.com/FasterXML/jackson-dataformats-text
-    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.19.0'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.0'
 
     // Command-line parsing: https://picocli.info
     implementation ('info.picocli:picocli:4.7.7')
@@ -44,9 +46,9 @@ dependencies {
     implementation files(new File(project.ext.absToolsDir, "absfrontend.jar"))
 
     // Logging: SLF4J (implemented by Logback)
-    implementation 'ch.qos.logback:logback-classic:1.5.18'
+    implementation 'ch.qos.logback:logback-classic:1.5.20'
     // Include logstash-logback-encoder for JSON formatting
-    implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
+    implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
 
     // SQLite library
     implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
@@ -59,8 +61,8 @@ dependencies {
     }
 
     // Use JUnit Jupiter for testing.
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.0.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.0'
 }
 
 task downloadAbsFrontend {
@@ -143,7 +145,7 @@ tasks.withType(JavaCompile) {
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
