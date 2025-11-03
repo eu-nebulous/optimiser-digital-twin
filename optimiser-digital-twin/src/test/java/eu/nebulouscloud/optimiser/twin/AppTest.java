@@ -48,10 +48,13 @@ class AppTest {
     void runSimpleSimulation() throws Exception {
         URL traceDbURL = AppTest.class.getClassLoader().getResource("simple-execution/trace.db");
         URL scenarioDbURL = AppTest.class.getClassLoader().getResource("simple-execution/scenario.db");
+        URL calibrationDbURL = AppTest.class.getClassLoader().getResource("simple-execution/calibration.db");
         Path traceDb = tempDir.resolve("trace.db");
         Path scenarioDb = tempDir.resolve("scenario.db");
+        Path calibrationDb = tempDir.resolve("calibration.db");
         Files.copy(traceDbURL.openStream(), traceDb);
         Files.copy(scenarioDbURL.openStream(), scenarioDb);
+        Files.copy(calibrationDbURL.openStream(), calibrationDb);
         long nEvents = -1;
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + traceDb.toString());
              Statement statement = connection.createStatement()) {
@@ -61,7 +64,7 @@ class AppTest {
             nEvents = result.getLong(1);
             assertFalse(result.next());
         }
-        String simulationResult = Simulator.simulate(traceDb, scenarioDb);
+        String simulationResult = Simulator.simulate(traceDb, scenarioDb, calibrationDb);
         assertEquals(nEvents, simulationResult.lines().count());
     }
 

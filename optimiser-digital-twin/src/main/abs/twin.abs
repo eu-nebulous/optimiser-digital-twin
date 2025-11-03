@@ -1,26 +1,34 @@
 // A digital twin to replay recorded traces from the real system on varying
 // deployments, and emit traces in the same format.
 //
-// We use two databases, both of which must be present in the current directory:
+// We use the following databases, all of which must be present in the current
+// directory:
 //
-// - `trace.db`: contains one table `trace_events`, can be created from a file
-//   of recorded traces by the `import-traces` sub-command.
+// - `trace.db`: contains one table `trace_events` with one entry per trace
+//   event that should be replayed. Can be created from a file of recorded
+//   traces by the `import-traces` sub-command.
 //
-// - `scenario.db`: contains one table `scenario`, can be created from an app
+// - `scenario.db`: contains one table `scenario` that contains deployment
+//   component size and count for each component.  Can be created from an app
 //   creation message file and (optionally) a solver solution message file by
 //   the `import-deployment` sub-command.
+//
+// - `calibration.db`: contains one table `factors` with the constant
+//   (duration) and variable (cost) factors for each component.
 
 module Twin;
 import * from ABS.DC;
 
 // Database-related types
 
-data DBNode = DBNode(String nodeName, Int nodeCpu, Int nodeMemory, Int nodeReplicas);
-
 def List<Int> minEventTime__() =
     builtin(sqlite3, "trace.db", "SELECT min(event_time) FROM trace_events");
 
+// Return the time of the first event.  This is used as the offset between the
+// ABS logical clock and the trace event times.  (See `eventJsonl`.)
 def Int minEventTime() = head(minEventTime__());
+
+data DBNode = DBNode(String nodeName, Int nodeCpu, Int nodeMemory, Int nodeReplicas);
 
 // All components (nodes).  TODO: figure out what to do with remote-only
 // nodes, e.g. a database node that we don't instrument
@@ -38,13 +46,16 @@ data Event = Event(String eventLocalComponent, String eventLocalId,
                    String eventActivityId, String eventType,
                    Int eventTime, Int eventPayloadSize);
 
+// Generate a jsonl line (JSON object) for the event at the current time.
+//
+// Note that since we start with time t=0 when replaying events, we use `now()
+// + minTime` instead of just the current time.  This means that recorded and
+// replayed trace start at the same time point (but events after the first
+// ones will occur at different times).
 def String eventJsonl(Event event, Int minTime) =
-    // Generate a jsonl line with the event, but use now() + minTime
-    // instead of the "ground truth" of the trace.  We pass in minTime
-    // so that we don't have to call `minEventTime()` every time.
     `{"CompName":"$eventLocalComponent(event)$","ReplicaID":"$eventLocalId(event)$","EventType":"$eventType(event)$","EventTime":$timeValue(now()) + minTime$,"PayloadSize":$eventPayloadSize(event)$,"ActivityID":"$eventActivityId(event)$","RemoteCompName":"$eventRemoteComponent(event)$"}`;
 
-// All trace events of given activity, ordered by time
+// All trace events of activity with id `activityId`, ordered by time
 def List<Event> activityTrace(String activityId) =
     builtin(sqlite3, "trace.db",
             `SELECT local_name, local_id, remote_name, activity_id, event_type, event_time, payload_size
@@ -53,6 +64,7 @@ def List<Event> activityTrace(String activityId) =
               ORDER BY event_time ASC`,
             activityId);
 
+// The starting events of activity with id `activityId`.
 def List<Event> startingEvents(String activityId) =
     builtin(sqlite3, "trace.db",
             `SELECT local_name, local_id, remote_name, activity_id, event_type, event_time, payload_size
@@ -68,6 +80,7 @@ def List<Event> startingEvents(String activityId) =
                         AND b.event_time < a.event_time)`,
             activityId);
 
+// The outgoing events caused by `in_event`.  Can be more than one event.
 def List<Event> outgoingEventsForIncoming(Event in_event) =
     builtin(sqlite3, "trace.db",
             `WITH
@@ -98,9 +111,10 @@ def List<Event> outgoingEventsForIncoming(Event in_event) =
             eventTime(in_event),
             eventRemoteComponent(in_event));
 
-// For an 'out' (leaves a component) trace event, find the
-// corresponding 'in' or 'ack' event.  The return value should always
-// contain one event.
+// The incoming event corresponding to the given `out_event`.  Can be an event
+// of type 'in' or 'ack'.  This function should always return a list of one
+// event (if the recorded trace is well-formed), since we don't do broadcast
+// events.
 def List<Event> incomingEventForOutgoing(Event out_event) =
     builtin(sqlite3, "trace.db",
             // Lots of superfluous WITH subqueries; we could pass in
@@ -137,13 +151,36 @@ def List<Event> incomingEventForOutgoing(Event out_event) =
             eventTime(out_event),
             eventRemoteComponent(out_event));
 
+// The event processing costs for each component.
+data CalibrationEntry = CalibrationEntry(String entryName, Rat entryConstant, Rat entryVariable);
+
+def List<CalibrationEntry> componentCosts() =
+    builtin(sqlite3, "calibration.db",
+            "SELECT component, constant_cost, variable_cost FROM factors");
+
+def Map<String, Rat> componentConstantFactors() =
+    foldl((CalibrationEntry e, Map<String, Rat> m) =>
+          put(m, entryName(e), entryConstant(e)))
+    (componentCosts(), map[]);
+
+def Map<String, Rat> componentVariableFactors() =
+    foldl((CalibrationEntry e, Map<String, Rat> m) =>
+          put(m, entryName(e), entryVariable(e)))
+    (componentCosts(), map[]);
+
 // Model nodes
 
 interface Component {
     Unit execute(Int cost);
 }
-class Component(String name, Int replicaId) implements Component {
+class Component(String name,
+                Int replicaId,
+                Rat constantFactor,
+                Rat variableFactor)
+    implements Component
+{
     Unit execute(Int cost) {
+        // TODO use factor
         [Cost: cost] skip;
     }
 }
@@ -212,19 +249,25 @@ class Activity(String activityId, Map<String, List<Component>> components)
 }
 
 {
+    Map<String, Rat> constantFactors = componentConstantFactors();
+    Map<String, Rat> variableFactors = componentVariableFactors();
     Map<String, List<Component>> components = map[];
     foreach (nodetype in allNodes()) {
         List<Component> nodeComponents = Nil;
         foreach (nodeId in range(1, nodeReplicas(nodetype))) {
-            Component component = null;
+            DeploymentComponent dc = null;
+            String nodeName = nodeName(nodetype);
+            // If the factors are unspecified (should not happen), assume only
+            // constant delays.
+            Rat constantFactor = lookupDefault(constantFactors, nodeName, 1);
+            Rat variableFactor = lookupDefault(variableFactors, nodeName, 0);
             if (nodeCpu(nodetype) > 0) {
-                DeploymentComponent dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, nodeCpu(nodetype) * 10)]);
-                [DC: dc]component = new Component(nodeName(nodetype), nodeId);
+                dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, nodeCpu(nodetype) * 10)]);
             } else {
-                // TODO: unspecified node size, read node default values from somewhere
-                DeploymentComponent dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, 10)]);
-                [DC: dc]component = new Component(nodeName(nodetype), nodeId);
+                // TODO: Unspecified node size, read node default values from somewhere
+                dc = new DeploymentComponent(`$nodeName(nodetype)$-$nodeId$`, map[Pair(Speed, 10)]);
             }
+            [DC: dc] Component component = new Component(nodeName, nodeId, constantFactor, variableFactor);
             nodeComponents = Cons(component, nodeComponents);
         }
         components = put(components, nodeName(nodetype), nodeComponents);
