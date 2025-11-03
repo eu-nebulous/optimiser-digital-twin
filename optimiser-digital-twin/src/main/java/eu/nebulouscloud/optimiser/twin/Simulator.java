@@ -6,6 +6,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 import lombok.extern.slf4j.Slf4j;
@@ -25,12 +26,15 @@ public class Simulator implements Callable<Integer> {
     @Parameters(description = "The deployment scenario database")
     private Path scenarioDbParam;
 
+    @Parameters(description = "The calibration database")
+    private Path calibrationDbParam;
+
     @ParentCommand
     private Main app;
 
     @Override
     public Integer call() throws Exception {
-        String result = simulate(traceDbParam, scenarioDbParam);
+        String result = simulate(traceDbParam, scenarioDbParam, calibrationDbParam);
         if (result != null) {
             System.out.println(result);
             return 0;
@@ -47,20 +51,23 @@ public class Simulator implements Callable<Integer> {
      * containing the data files, and we set {@code System.out} to a stream
      * that records the output of the model.
      *
+     * <p>Note that currently only "base" database filenames are supported,
+     * i.e., the abs program cannot use database locations like "foo/bar.db"
+     * in its sql queries.
+     *
      * @param traceDb a database file containing traces.
      * @param scenarioDb a database file containing the deployment scenario.
+     * @param calibrationDb a database file containing the calibration parameters.
      * @return the model's output (unparsed), or null if the simulation failed.
      */
-    public static String simulate(Path traceDb, Path scenarioDb) {
-        if (!traceDb.toFile().canRead()) {
-            log.error("File {} does not exist or cannot be read", traceDb);
-            return null;
+    public static String simulate(Path traceDb, Path scenarioDb, Path calibrationDb) {
+        List<Path> dbFiles = List.of(traceDb, scenarioDb, calibrationDb);
+        for (Path path : dbFiles) {
+            if (!Files.isReadable(path)) {
+                log.error("File {} does not exist or cannot be read", path);
+                return null;
+            }
         }
-        if (!scenarioDb.toFile().canRead()) {
-            log.error("File {} does not exist or cannot be read", scenarioDb);
-            return null;
-        }
-
         Path tempDir = null;
         String origAbsDatadir = System.getProperty("abs.datadir");
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -70,8 +77,9 @@ public class Simulator implements Callable<Integer> {
             tempDir = Files.createTempDirectory("simulation-");
             System.setProperty("abs.datadir", tempDir.toAbsolutePath().toString());
             tempDir.toFile().deleteOnExit(); // note that this only deletes when the VM exists regularly
-            Files.copy(traceDb, tempDir.resolve("trace.db"));
-            Files.copy(scenarioDb, tempDir.resolve("scenario.db"));
+            for (Path path : dbFiles) {
+                Files.copy(path, tempDir.resolve(path.getFileName()));
+            }
             System.setOut(printStream);
             Twin.Main.main(new String[0]);
         } catch (Exception e) {
@@ -92,7 +100,7 @@ public class Simulator implements Callable<Integer> {
                 Files.walk(tempDir)
                     .sorted(Comparator.reverseOrder())
                     .forEach(path -> {
-                        try { Files.delete(path); }
+                    try { Files.delete(path); }
                         catch (IOException e) { /* ignore */ }
                 });
             } catch (IOException e) { /* ignore */ }
