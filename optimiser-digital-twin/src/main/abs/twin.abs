@@ -47,9 +47,10 @@ def String eventJsonl(Event event, Int minTime) =
 // All trace events of given activity, ordered by time
 def List<Event> activityTrace(String activityId) =
     builtin(sqlite3, "trace.db",
-            `SELECT * FROM trace_events
-             WHERE activity_id = ?
-             ORDER BY event_time ASC`,
+            `SELECT local_name, local_id, remote_name, activity_id, event_type, event_time, payload_size
+               FROM trace_events
+              WHERE activity_id = ?
+              ORDER BY event_time ASC`,
             activityId);
 
 def List<Event> startingEvents(String activityId) =
