@@ -36,8 +36,9 @@ dependencies {
     // JSON parsing, also used by the data classes defined in sal-common:
     // https://github.com/FasterXML/jackson
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
-    // YAML parsing: https://github.com/FasterXML/jackson-dataformats-text
+    // YAML, CSV parsing: https://github.com/FasterXML/jackson-dataformats-text
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.20.1'
 
     // Command-line parsing: https://picocli.info
     implementation ('info.picocli:picocli:4.7.7')

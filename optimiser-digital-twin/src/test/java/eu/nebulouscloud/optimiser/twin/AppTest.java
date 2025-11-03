@@ -117,6 +117,24 @@ class AppTest {
         }
     }
 
+    @Test void createCalibrationDatabase() throws SQLException {
+        Path db = Path.of(tempDir.toString(), "calibration.db");
+        String csv = """
+            license-plate-reading-service,2.5,3
+            """;
+        assertTrue(CalibrationImporter.saveCalibration(db, csv));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT * FROM factors");
+            assertTrue(result.next());
+            assertEquals("license-plate-reading-service", result.getString(1)); // component
+            assertEquals(2.5, result.getDouble(2));    // constant factor
+            assertEquals(3, result.getDouble(3)); // variable factor
+            assertFalse(result.next());
+        }
+    }
+
     @Test void readTrace() throws IOException, SQLException {
         Path db = Path.of(tempDir.toString(), "traces.db");
         URL traceURL = AppTest.class.getClassLoader().getResource("logs.jsonl");
