@@ -180,8 +180,8 @@ class Component(String name,
     implements Component
 {
     Unit execute(Int cost) {
-        // TODO use factor
-        [Cost: cost] skip;
+        await duration(constantFactor);
+        [Cost: cost * variableFactor] skip;
     }
 }
 
