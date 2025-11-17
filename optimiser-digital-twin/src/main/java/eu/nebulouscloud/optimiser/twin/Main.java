@@ -29,7 +29,8 @@ import picocli.CommandLine.ScopeType;
         Server.class,
         DeploymentImporter.class,
         TraceImporter.class,
-        Simulator.class
+        Simulator.class,
+        TraceAnalyzer.class
     }
 )
 @Slf4j

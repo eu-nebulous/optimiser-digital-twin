@@ -143,7 +143,7 @@ class AppTest {
         URL traceURL = AppTest.class.getClassLoader().getResource("logs.jsonl");
         BufferedReader reader = new BufferedReader(
             new InputStreamReader(traceURL.openStream(), StandardCharsets.UTF_8));
-        long nTraces = TraceImporter.importTraces(db, reader.lines().iterator());
+        long nTraces = TraceImporter.storeLog(db, reader);
         assertEquals(48, nTraces);
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
              Statement statement = connection.createStatement()) {

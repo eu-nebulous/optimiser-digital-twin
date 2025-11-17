@@ -1,6 +1,8 @@
 package eu.nebulouscloud.optimiser.twin;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -8,10 +10,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,7 +43,7 @@ public class TraceImporter implements Callable<Integer> {
     @Override
     public Integer call() {
         try {
-            importTraces(dbFile, traceFile);
+            storeLog(dbFile, traceFile);
         } catch (SQLException e) {
             log.error("Database error during trace import", e);
             return 1;
@@ -51,10 +54,66 @@ public class TraceImporter implements Callable<Integer> {
         return 0;
     }
 
-    /** The set of keys needing to be present in a valid jsonl-formatted log
-      * line */
-    static Set<String> requiredKeys = Set.of("CompName", "ReplicaID", "EventType", "EventTime",
-        "PayloadSize", "ActivityID", "RemoteCompName");
+    /**
+     * Check if {@code event} has all required attributes of a well-formed
+     * trace event.
+     */
+    public static boolean isEventWellformed(JsonNode event) {
+        Set<String> requiredKeys = Set.of("CompName", "ReplicaID",
+            "EventType", "EventTime", "PayloadSize", "ActivityID",
+            "RemoteCompName");
+        for (String key : requiredKeys) {
+            if (event.get(key) == null) return false;
+        }
+        if (!(event.at("/EventTime").canConvertToLong())) return false;
+        if (!(event.at("/PayloadSize").canConvertToLong())) return false;
+        return true;
+    }
+
+    /**
+     * Read a log file and return a sequence of LogEntry records containing
+     * all well-formed log entry lines in the file.
+     *
+     * @throws IOException if the file cannot be read
+     */
+    public static List<LogEntry> readLog(Path file) throws IOException {
+        return readLog(Files.lines(file).iterator());
+    }
+
+    /**
+     * Process a sequence of log output lines and return a sequence of JSON
+     * objects containing all well-formed trace entries.  Log entries are
+     * well-formed if they are parseable as JSON and contain all required
+     * attributes.
+     */
+    public static List<LogEntry> readLog(Iterator<String> logLines) {
+        ObjectMapper mapper = new ObjectMapper();
+        ArrayList<LogEntry> log = new ArrayList<>();
+        while (logLines.hasNext()) {
+            String line = logLines.next();
+            JsonNode event;
+            try {
+                event = mapper.readTree(line);
+            } catch (JsonProcessingException e) {
+                // random log line that's not in json format
+                continue;
+            }
+            if (!isEventWellformed(event)) {
+                // random json log line that's not a trace event
+                continue;
+            } else {
+                log.addLast(new LogEntry(
+                    event.at("/CompName").asText(),
+                    event.at("/ReplicaID").asText(),
+                    event.at("/RemoteCompName").asText(),
+                    LogEntry.LogEntryType.fromString(event.at("/EventType").asText()),
+                    event.at("/ActivityID").asText(),
+                    event.at("/EventTime").asLong(),
+                    event.at("/PayloadSize").asLong()));
+            }
+        }
+        return log;
+    }
 
     /**
      * Import traces from a file into a database.
@@ -63,9 +122,17 @@ public class TraceImporter implements Callable<Integer> {
      * @param traceFile the file containing log entries in JSONL format.
      * @return the number of trace events imported.
      */
-    public static long importTraces(Path dbFile, Path traceFile) throws IOException, SQLException {
+    public static long storeLog(Path dbFile, Path traceFile) throws IOException, SQLException {
         Iterator<String> lines = Files.lines(traceFile).iterator();
-        return importTraces(dbFile, lines);
+        return storeLog(dbFile, readLog(lines));
+    }
+
+    /**
+     * Import traces into a database.
+     */
+    public static long storeLog(Path dbFile, BufferedReader traceFile) throws IOException, SQLException {
+        Iterator<String> lines = traceFile.lines().iterator();
+        return storeLog(dbFile, readLog(lines));
     }
 
     /**
@@ -77,7 +144,7 @@ public class TraceImporter implements Callable<Integer> {
      * @throws SQLException
      * @throws IOException
      */
-    public static long importTraces(Path dbFile, Iterator<String> logLines) throws SQLException, IOException {
+    public static long storeLog(Path dbFile, List<LogEntry> events) throws SQLException, IOException {
         ObjectMapper mapper = new ObjectMapper();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile);
              Statement statement = connection.createStatement()) {
@@ -98,9 +165,8 @@ public class TraceImporter implements Callable<Integer> {
                        ?, MAX(0, ?), MAX(0, ?))
                      """)) {
                 long nInserts = 0;
-                while (logLines.hasNext()) {
-                    String line = logLines.next();
-                    logEvent(insert, mapper.readTree(line));
+                for (LogEntry event : events) {
+                    logEvent(insert, event);
                     nInserts = nInserts + 1;
                     if (nInserts % 10000 == 0) insert.executeBatch();
                 }
@@ -111,21 +177,17 @@ public class TraceImporter implements Callable<Integer> {
     }
 
     /**
-     * Check if event contains all required keys, and add a batch statement to
-     * statement if yes.
+     * Add a batch statement to record the given event.
      */
-    private static int logEvent(PreparedStatement statement, JsonNode event) {
-        for (String key : requiredKeys) {
-            if (event.get(key) == null) return 0;
-        }
+    private static int logEvent(PreparedStatement statement, LogEntry event) {
         try {
-            statement.setString(1, event.get("CompName").asText());
-            statement.setString(2, event.get("ReplicaID").asText());
-            statement.setString(3, event.get("RemoteCompName").asText());
-            statement.setString(4, event.get("ActivityID").asText());
-            statement.setString(5, event.get("EventType").asText());
-            statement.setLong(6, event.get("EventTime").asLong());
-            statement.setLong(7, event.get("PayloadSize").asLong());
+            statement.setString(1, event.CompName());
+            statement.setString(2, event.ReplicaID());
+            statement.setString(3, event.RemoteCompName());
+            statement.setString(4, event.ActivityID());
+            statement.setString(5, event.EventType().toString());
+            statement.setLong(6, event.EventTime());
+            statement.setLong(7, event.PayloadSize());
             statement.addBatch();
         } catch (SQLException e) {
             log.trace("Could not log trace event", e);
