@@ -115,6 +115,17 @@ public class TraceImporter implements Callable<Integer> {
     }
 
     /**
+     * Import traces from a file into the default database.
+     * @throws IOException 
+     */
+    public static long storeLog(Path traceFile) throws IOException {
+        log.info("Note: default database location not implemented yet");
+        Iterator<String> lines = Files.lines(traceFile).iterator();
+        List<LogEntry> entries = readLog(lines);
+        return entries.size();
+    }
+
+    /**
      * Import traces from a file into a database.
      *
      * @param dbFile the database to import into.
@@ -122,6 +133,7 @@ public class TraceImporter implements Callable<Integer> {
      * @return the number of trace events imported.
      */
     public static long storeLog(Path dbFile, Path traceFile) throws IOException, SQLException {
+        log.info("Reading log {} into database {}", traceFile, dbFile);
         Iterator<String> lines = Files.lines(traceFile).iterator();
         return storeLog(dbFile, readLog(lines));
     }
@@ -144,7 +156,6 @@ public class TraceImporter implements Callable<Integer> {
      * @throws IOException
      */
     public static long storeLog(Path dbFile, List<LogEntry> events) throws SQLException, IOException {
-        ObjectMapper mapper = new ObjectMapper();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile);
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
@@ -165,7 +176,14 @@ public class TraceImporter implements Callable<Integer> {
                      """)) {
                 long nInserts = 0;
                 for (LogEntry event : events) {
-                    logEvent(insert, event);
+                    insert.setString(1, event.CompName());
+                    insert.setString(2, event.ReplicaID());
+                    insert.setString(3, event.RemoteCompName());
+                    insert.setString(4, event.ActivityID());
+                    insert.setString(5, event.EventType().toString());
+                    insert.setLong(6, event.EventTime());
+                    insert.setLong(7, event.PayloadSize());
+                    insert.addBatch();
                     nInserts = nInserts + 1;
                     if (nInserts % 10000 == 0) insert.executeBatch();
                 }
@@ -174,25 +192,4 @@ public class TraceImporter implements Callable<Integer> {
             }
         }
     }
-
-    /**
-     * Add a batch statement to record the given event.
-     */
-    private static int logEvent(PreparedStatement statement, LogEntry event) {
-        try {
-            statement.setString(1, event.CompName());
-            statement.setString(2, event.ReplicaID());
-            statement.setString(3, event.RemoteCompName());
-            statement.setString(4, event.ActivityID());
-            statement.setString(5, event.EventType().toString());
-            statement.setLong(6, event.EventTime());
-            statement.setLong(7, event.PayloadSize());
-            statement.addBatch();
-        } catch (SQLException e) {
-            log.trace("Could not log trace event", e);
-            return 0;
-        }
-        return 1;
-    }
-
 }
