@@ -37,14 +37,14 @@ import picocli.CommandLine.ScopeType;
 public class Main implements Callable<Integer> {
 
     @Option(names = {"--verbose", "-v"},
-            description = "Turn on more verbose logging output. Can be given multiple times. When not given, print only warnings and error messages. With @|underline -v|@, print status messages. With @|underline -vvv|@, print everything.",
+        description = "Turn on more verbose logging output. Can be given multiple times. When not given, print only warnings and error messages. With @|underline -v|@, print status messages. With @|underline -vvv|@, print everything.",
         scope = ScopeType.INHERIT)
     private boolean[] verbosity;
 
     @Option(names = {"--log-dir"},
-            description = "Directory where to log incoming and outgoing messages as files. Can also be set via the @|bold LOGDIR|@ variable.",
-            paramLabel = "LOGDIR",
-            defaultValue = "${LOGDIR}")
+        description = "Debugging help: directory where to log incoming and outgoing messages as files. Can also be set via the @|bold LOGDIR|@ variable.  Note that this is a diagnostic tool; no effort is made to clean up stale files so this parameter should not be set during normal operation.",
+        paramLabel = "LOGDIR",
+        defaultValue = "${LOGDIR}")
     @Getter
     private static Path logDirectory;
 
