@@ -1,21 +1,14 @@
 package eu.nebulouscloud.optimiser.twin;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 import picocli.CommandLine.Command;
@@ -32,7 +25,7 @@ public class TraceAnalyzer implements Callable<Integer> {
     private Main app;
 
     @Parameters(description = "The trace logs to be analyzed")
-    private List<Path> logFiles;
+    private List<Path> logFiles = List.of();
 
     @Override
     public Integer call() {
