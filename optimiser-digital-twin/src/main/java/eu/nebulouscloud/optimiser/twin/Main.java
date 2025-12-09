@@ -29,6 +29,7 @@ import picocli.CommandLine.ScopeType;
         Server.class,
         DeploymentImporter.class,
         TraceImporter.class,
+        CalibrationImporter.class,
         Simulator.class,
         TraceAnalyzer.class
     }
