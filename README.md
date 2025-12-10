@@ -61,7 +61,7 @@ Traces are recorded in [jsonl](https://jsonlines.org) format.  They are
 converted into sqlite format via the following command:
 
 ```sh
-java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-traces logs.db optimiser-digital-twin/src/test/resources/logs.jsonl
+java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-traces trace.db optimiser-digital-twin/src/test/resources/logs.jsonl
 ```
 
 ## Creating a calibration database
@@ -76,9 +76,9 @@ java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-cali
 
 ## Running a simulation
 
-With a deployment scenario, traces, and calibration values, we can run a
-simulation.  The simulator will print to stdout log entries in the same jsonl
-format as the recorded traces.
+With a deployment scenario database, a trace database and a calibration
+database, we can run a simulation.  The simulator will print to stdout log
+entries in the same jsonl format as the recorded traces.
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar simulate trace.db scenario.db calibration.db
@@ -87,8 +87,9 @@ java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar simulate tr
 ## Trace analysis
 
 A trace of events, in jsonl format, can be analyzed for total runtime,
-duration of individual events per component, etc.  Note that both recorded
-traces and the output of the simulator can be analyzed in this way.
+duration of individual events per component, etc.  Note that both the output
+of the simulator and traces recorded from the application can be analyzed in
+this way.
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar analyze-traces optimiser-digital-twin/src/test/resources/logs.jsonl
