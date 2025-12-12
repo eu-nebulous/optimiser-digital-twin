@@ -52,7 +52,6 @@ dependencies {
     // https://openproject.nebulouscloud.eu/projects/nebulous-collaboration-hub/wiki/asynchronous-messaging-specification
     implementation('eu.nebulouscloud:exn-connector-java:1.0-SNAPSHOT') {
         exclude group: 'org.slf4j', module: 'slf4j-simple'
-        changing = true
     }
 
     // Use JUnit Jupiter for testing.
