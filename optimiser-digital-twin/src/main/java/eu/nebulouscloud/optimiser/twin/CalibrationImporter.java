@@ -36,31 +36,25 @@ public class CalibrationImporter implements Callable<Integer> {
 
     @Override
     public Integer call() {
-	try {
-	    String calibrationCsv = Files.readString(calibrationCsvFile);
+        try {
+            String calibrationCsv = Files.readString(calibrationCsvFile);
             boolean success = saveCalibration(dbFile, calibrationCsv);
             return success ? 0 : 1;
-	} catch (IOException e) {
+        } catch (IOException e) {
             log.error("Could not create database file", e);
             return 1;
-	}
+        }
     }
 
-    @JsonPropertyOrder({ "component", "constant_factor", "variable_factor" })
-    private static class CalibrationEntry {
-        public String component;
-        public double constant_factor;
-        public double variable_factor;
-    }
+    private record CalibrationEntry (String component, double constant_factor, double variable_factor) {}
 
     /**
      * Create a database with the calibration values.
      *
      * @param dbName the name of the database to be created
      *
-     * @param a CSV string containing the calibration values.  The CSV
-     * contains no header.  Each line is of the format {@code
-     * componentName,constantFactor,variableFactor}.
+     * @param a CSV string containing the calibration values, with a header
+     * line {@code component,constant_factor,variable_factor}.
      *
      * @return true if the database creation was successful, false otherwise.
      */
@@ -77,11 +71,7 @@ public class CalibrationImporter implements Callable<Integer> {
                 """);
 
             CsvMapper csvMapper = new CsvMapper();
-            CsvSchema schema = CsvSchema.builder()
-                .addColumn("component")
-                .addColumn("constant_factor")
-                .addColumn("variable_factor")
-                .build();
+            CsvSchema schema = CsvSchema.emptySchema().withHeader();
 
             try (PreparedStatement insert = connection.prepareStatement("""
                     INSERT INTO factors (component, constant_cost, variable_cost)

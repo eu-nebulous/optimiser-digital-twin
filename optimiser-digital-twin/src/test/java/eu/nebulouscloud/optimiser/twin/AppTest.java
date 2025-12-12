@@ -155,6 +155,7 @@ class AppTest {
     @Test void createCalibrationDatabase() throws SQLException {
         Path db = Path.of(tempDir.toString(), "calibration.db");
         String csv = """
+            component,constant_factor,variable_factor
             license-plate-reading-service,2.5,3
             """;
         assertTrue(CalibrationImporter.saveCalibration(db, csv));
