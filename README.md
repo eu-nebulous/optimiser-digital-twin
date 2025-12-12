@@ -44,11 +44,31 @@ mirrors the real application's deployment; during evaluation, the solver
 supplies alternative values for deployment parameters that are specified to be
 variable.
 
-A scenario database for the digital twin can be created from an application
-creation message and solver solution by running the following command:
+There are two ways to specify a deployment scenario: either via the
+application creation message (and, optionally, the solver solution) sent by
+NebulOuS, or via a CSV file containing the machine characteristics for each
+component.
+
+### Importing a CSV file
+
+A deployment scenario is specified in a CSV file like this:
+
+```csv
+
+```
 
 ```sh
-java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-deployment scenario.db optimiser-digital-twin/src/test/resources/app-creation-message.json --solution optimiser-digital-twin/src/test/resources/sample-solution.json
+java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-deployment scenario.db --deployment-file optimiser-digital-twin/src/test/resources/deployment-example.csv
+```
+
+### Importing NebulOuS scenarios
+
+A scenario database for the digital twin can be created from a NebulOuS
+application creation message and solver solution by running the following
+command:
+
+```sh
+java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-deployment scenario.db --app-creation-message optimiser-digital-twin/src/test/resources/app-creation-message.json --solution optimiser-digital-twin/src/test/resources/sample-solution.json
 ```
 
 Note that the `--solution` parameter is optional; if no solver solution is

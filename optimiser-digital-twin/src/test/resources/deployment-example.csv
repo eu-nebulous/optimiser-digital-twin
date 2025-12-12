@@ -1,0 +1,4 @@
+Component,Replicas,Cores,Memory
+firecoat-sensor,1,1,512
+firecoat-persist,2,4,2048
+firecoat-postgis,1,2,4096

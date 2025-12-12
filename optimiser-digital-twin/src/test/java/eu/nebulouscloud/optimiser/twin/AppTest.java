@@ -110,12 +110,44 @@ class AppTest {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
              Statement statement = connection.createStatement()) {
             ResultSet result = statement.executeQuery(
-                "SELECT * FROM scenario WHERE component = 'license-plate-reading-service'");
+                "SELECT component, cpu, memory, replicas FROM scenario WHERE component = 'license-plate-reading-service'");
             assertTrue(result.next());
             assertEquals("license-plate-reading-service", result.getString(1)); // component
             assertEquals(2, result.getInt(2));    // cpu
             assertEquals(1024, result.getInt(3)); // memory
             assertEquals(1, result.getInt(4));    // replicas
+            assertFalse(result.next());
+        }
+    }
+
+    @Test void createScenarioFromCsv() throws SQLException {
+        String csv = """
+            Component,Replicas,Cores,Memory
+            firecoat-sensor,1,1,512
+            firecoat-persist,2,4,2048
+            firecoat-postgis,1,2,4096
+            """;
+        Path db = Path.of(tempDir.toString(), "config.db");
+        assertTrue(DeploymentImporter.saveCsvScenario(db, csv));
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+             Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery(
+                "SELECT component, cpu, memory, replicas FROM scenario ORDER BY component");
+            assertTrue(result.next());
+            assertEquals("firecoat-persist", result.getString(1)); // component
+            assertEquals(4, result.getInt(2));                     // cpu
+            assertEquals(2048, result.getInt(3));                  // memory
+            assertEquals(2, result.getInt(4));                     // replicas
+            assertTrue(result.next());
+            assertEquals("firecoat-postgis", result.getString(1)); // component
+            assertEquals(2, result.getInt(2));                     // cpu
+            assertEquals(4096, result.getInt(3));                  // memory
+            assertEquals(1, result.getInt(4));                     // replicas
+            assertTrue(result.next());
+            assertEquals("firecoat-sensor", result.getString(1)); // component
+            assertEquals(1, result.getInt(2));                     // cpu
+            assertEquals(512, result.getInt(3));                   // memory
+            assertEquals(1, result.getInt(4));                     // replicas
             assertFalse(result.next());
         }
     }
