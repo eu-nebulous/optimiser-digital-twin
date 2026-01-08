@@ -13,6 +13,10 @@ necessary dependencies at build time.
 ./gradlew build
 ```
 
+The build step produces a self-contained jar file
+`optimiser-digital-twin/dist/optimiser-digital-twin-all.jar` that can be
+started with `java -jar`.
+
 # Building the container
 
 A container can be built and run with the following commands:
@@ -29,11 +33,18 @@ the Nebulous system: `ACTIVEMQ_HOST`, `ACTIVEMQ_PORT`, `ACTIVEMQ_USER`,
 
 # Running from the command line
 
+All twin simulator functions are accessible by running the jar file produced
+by the build.
+
 List all sub-commands and common options:
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar -h
 ```
+
+The project root also contains a
+[Justfile](https://just.systems/man/en/introduction.html) that wraps the most
+common commands; see the output of `just --list`.
 
 ## Creating a deployment scenario database
 
@@ -51,14 +62,21 @@ component.
 
 ### Importing a CSV file
 
-A deployment scenario is specified in a CSV file like this:
+A deployment scenario is specified in a CSV file with the following header:
 
 ```csv
-
+Component,Replicas,Cores,Memory
 ```
+
+`Component` is a string, the other fields of each line are integers.
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-deployment scenario.db --deployment-file optimiser-digital-twin/src/test/resources/deployment-example.csv
+```
+
+Via just:
+```sh
+just import-scenario optimiser-digital-twin/src/test/resources/deployment-example.csv
 ```
 
 ### Importing NebulOuS scenarios
@@ -84,14 +102,30 @@ converted into sqlite format via the following command:
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-traces trace.db optimiser-digital-twin/src/test/resources/logs.jsonl
 ```
 
+Via just:
+```sh
+just import-trace optimiser-digital-twin/src/test/resources/logs.jsonl 
+```
+
 ## Creating a calibration database
 
 The calibration database provides the constant and variable cost factors for
 replaying an event on the digital twin.  It can be created from a CSV file
-with one entry for each component.
+with one entry for each component, with a header like this:
+
+```csv
+component,constant_factor,variable_factor
+```
+
+`component` is a string, with the same name as a component in the scenario database.  The other two fields are floating-point numbers.
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar import-calibration calibration.db optimiser-digital-twin/src/test/resources/calibration.csv
+```
+
+Via just:
+```sh
+just import-calibration optimiser-digital-twin/src/test/resources/calibration.csv
 ```
 
 ## Running a simulation
@@ -104,6 +138,11 @@ entries in the same jsonl format as the recorded traces.
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar simulate trace.db scenario.db calibration.db
 ```
 
+Via just:
+```sh
+just run output.jsonl
+```
+
 ## Trace analysis
 
 A trace of events, in jsonl format, can be analyzed for total runtime,
@@ -113,4 +152,9 @@ this way.
 
 ```sh
 java -jar optimiser-digital-twin/dist/optimiser-digital-twin-all.jar analyze-traces optimiser-digital-twin/src/test/resources/logs.jsonl
+```
+
+Via just:
+```sh
+just analyze-trace optimiser-digital-twin/src/test/resources/logs.jsonl
 ```
