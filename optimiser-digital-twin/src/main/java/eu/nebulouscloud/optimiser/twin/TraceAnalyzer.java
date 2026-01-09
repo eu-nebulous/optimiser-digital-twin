@@ -110,21 +110,22 @@ public class TraceAnalyzer implements Callable<Integer> {
     private static void printTraceStatistics(final List<LogEntry> entries) {
         System.out.format("Valid trace entries: %d%n%n", entries.size());
 
-        final var statsPerActivity = calculateTimePerActivity(entries);
-        final var overallDurationStats = statsPerActivity.values().stream()
+        final Map<String, LongSummaryStatistics> statsPerActivity = calculateTimePerActivity(entries);
+        final LongSummaryStatistics overallDurationStats = statsPerActivity.values().stream()
             .collect(Collectors.summarizingLong((s) -> s.getMax() - s.getMin()));
 
         System.out.format("Activity statistics: count: %s, execution time min: %s, max: %s, average: %s%n",
             overallDurationStats.getCount(), overallDurationStats.getMin(), overallDurationStats.getMax(), overallDurationStats.getAverage());
+
         // Use Jackson to generate CSV outpout: this is many more lines of
         // code but will handle string escaping of funky component names
-        CsvSchema schema = CsvSchema.builder()
+        CsvSchema activitySchema = CsvSchema.builder()
             .addColumn("ActivityID")
             .addColumn("executionTime")
             .setUseHeader(true)
             .build();
-        StringWriter collector = new StringWriter();
-        try (var csvWriter = new CsvMapper().writer(schema).writeValues(collector)) {
+        StringWriter activityCollector = new StringWriter();
+        try (var csvWriter = new CsvMapper().writer(activitySchema).writeValues(activityCollector)) {
             for (var e : statsPerActivity.entrySet()) {
                 csvWriter.write(new Object[]{ e.getKey(), e.getValue().getMax() - e.getValue().getMin() } );
             }
@@ -132,12 +133,44 @@ public class TraceAnalyzer implements Callable<Integer> {
             // Shouldn't happen
             log.error("Failed to print activity statistics", e);
         }
-        System.out.println(collector.toString());
+        System.out.println(activityCollector.toString());
         System.out.println();
 
-        final Map<String, List<Long>> times = calculateProcessingTimesPerComponent(entries);
-        System.out.format("Components: %d%n", times.size());
-        times.forEach((component, compTimes) -> {
+        final Map<String, List<Long>> componentTimes = calculateProcessingTimesPerComponent(entries);
+        final Map<String, LongSummaryStatistics> componentTimeStats = componentTimes.entrySet().stream()
+            .filter(entry -> !entry.getValue().isEmpty())
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> entry.getValue().stream()
+                    .collect(LongSummaryStatistics::new, LongSummaryStatistics::accept, LongSummaryStatistics::combine)));
+
+        CsvSchema componentSchema = CsvSchema.builder()
+            .addColumn("Component")
+            .addColumn("count")
+            .addColumn("min")
+            .addColumn("max")
+            .addColumn("average")
+            .setUseHeader(true)
+            .build();
+        StringWriter componentCollector = new StringWriter();
+        try (var csvWriter = new CsvMapper().writer(componentSchema).writeValues(componentCollector)) {
+            for (var e : componentTimeStats.entrySet()) {
+                csvWriter.write(new Object[]{
+                    e.getKey(),
+                    e.getValue().getCount(),
+                    e.getValue().getMin(),
+                    e.getValue().getMax(),
+                    e.getValue().getAverage() } );
+            }
+        } catch (IOException e) {
+            // Shouldn't happen
+            log.error("Failed to print component statistics", e);
+        }
+        System.out.println(componentCollector.toString());
+        System.out.println();
+
+        System.out.format("Components: %d%n", componentTimes.size());
+        componentTimes.forEach((component, compTimes) -> {
             System.out.format("Times for \"%s\": %s%n", component, compTimes);
         });
     }
