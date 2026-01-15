@@ -61,8 +61,9 @@ public class Simulator implements Callable<Integer> {
      * @return the model's output (unparsed), or null if the simulation failed.
      */
     public static String simulate(Path traceDb, Path scenarioDb, Path calibrationDb) {
-        List<Path> dbFiles = List.of(traceDb, scenarioDb, calibrationDb);
-        for (Path path : dbFiles) {
+        log.info("Running simulation with trace {}, scenario {}, calibration {}",
+            traceDb, scenarioDb, calibrationDb);
+        for (Path path : List.of(traceDb, scenarioDb, calibrationDb)) {
             if (!Files.isReadable(path)) {
                 log.error("File {} does not exist or cannot be read", path);
                 return null;
@@ -75,11 +76,13 @@ public class Simulator implements Callable<Integer> {
         PrintStream originalOut = System.out;
         try {
             tempDir = Files.createTempDirectory("simulation-");
+            log.trace("Setting simulation data directory to {}", tempDir);
             System.setProperty("abs.datadir", tempDir.toAbsolutePath().toString());
             tempDir.toFile().deleteOnExit(); // note that this only deletes when the VM exists regularly
-            for (Path path : dbFiles) {
-                Files.copy(path, tempDir.resolve(path.getFileName()));
-            }
+            // Make sure the filenames agree with the ones referred to in `twin.abs`
+            Files.copy(traceDb, tempDir.resolve("trace.db"));
+            Files.copy(scenarioDb, tempDir.resolve("scenario.db"));
+            Files.copy(calibrationDb, tempDir.resolve("calibration.db"));
             System.setOut(printStream);
             Twin.Main.main(new String[0]);
         } catch (Exception e) {
@@ -92,6 +95,7 @@ public class Simulator implements Callable<Integer> {
             } else {
                 System.setProperty("abs.datadir", origAbsDatadir);
             }
+            log.info("Simulation finished");
         }
 
         if (tempDir != null) {
