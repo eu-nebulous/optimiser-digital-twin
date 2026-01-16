@@ -4,9 +4,9 @@ twinjar := "optimiser-digital-twin/dist/optimiser-digital-twin-all.jar"
 build:
     ./gradlew build
 
-# Run the twin, record in file jsonl tracelog (output file will be cleared)
-run tracelog:
-    java -jar {{twinjar}} simulate trace.db scenario.db calibration.db | tee {{tracelog}}
+# Run the twin, output trace on screen
+run:
+    java -jar {{twinjar}} simulate trace.db scenario.db calibration.db
 
 # Analyze tracefile
 analyze-trace tracefile:
