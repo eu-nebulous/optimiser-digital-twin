@@ -22,7 +22,7 @@ repositories {
 
     // NebulOuS-developed components
     maven {
-        url "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+        url = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
         content {
             includeModule("eu.nebulouscloud", "exn-connector-java")
         }

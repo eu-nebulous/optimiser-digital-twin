@@ -13,6 +13,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.slf4j.MDC;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import picocli.CommandLine.Command;
@@ -31,29 +33,37 @@ public class Server implements Callable<Integer> {
     @ParentCommand
     private Main app;
 
-    @Option(names = {"--activemq-host"},
+    @Option(names = {"-h", "--activemq-host"},
             description = "The hostname of the ActiveMQ server.  Can also be set via the @|bold ACTIVEMQ_HOST|@ environment variable.",
             paramLabel = "ACTIVEMQ_HOST",
             defaultValue = "${ACTIVEMQ_HOST:-localhost}")
     private String activemq_host;
 
-    @Option(names = {"--activemq-port"},
+    @Option(names = {"-p", "--activemq-port"},
             description = "The port of the ActiveMQ server.  Can also be set via the @|bold ACTIVEMQ_PORT|@ environment variable.",
             paramLabel = "ACTIVEMQ_PORT",
             defaultValue = "${ACTIVEMQ_PORT:-5672}")
     private int activemq_port;
 
-    @Option(names = {"--activemq-user"},
+    @Option(names = {"-u", "--activemq-user"},
             description = "The user name for the ActiveMQ server. Can also be set via the @|bold ACTIVEMQ_USER|@ environment variable.",
             paramLabel = "ACTIVEMQ_USER",
             defaultValue = "${ACTIVEMQ_USER}")
     private String activemq_user;
 
-    @Option(names = {"--activemq-password"},
+    @Option(names = {"--pw", "--activemq-password"},
             description = "The password for the ActiveMQ server. Can also be set via the @|bold ACTIVEMQ_PASSWORD|@ environment variable.",
             paramLabel = "ACTIVEMQ_PASSWORD",
             defaultValue = "${ACTIVEMQ_PASSWORD}")
     private String activemq_password;
+
+    @Option(names = {"--id"},
+        description = "The application ID of the Nebulous app we are twinning.  Can also be set via the @|bold APPLICATION_ID|@ variable.",
+        paramLabel = "APPLICATION_ID",
+        defaultValue = "${APPLICATION_ID}"
+    )
+    @Getter
+    private String appId;
 
     @Option(names = {"--trace-dir"},
         description = "Directory where the digital twin picks up trace files.  Can also be set via the @|bold TRACEDIR|@ variable.",
@@ -78,22 +88,29 @@ public class Server implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (appId == null || appId.equals("")) {
+            log.error("APPLICATION_ID not set, twin will be non-functional");
+            // We don't want to kill the server, but make sure appId is not
+            // null so we don't have to check everywhere
+            appId = "";
+            MDC.put("appId", "APPLICATION_ID NOT SET"); // shout it from the logs
+        } else {
+            MDC.put("appId", appId);
+        }
         // Start connection to ActiveMQ if possible.
         if (activemq_user != null && activemq_password != null) {
             log.info("Preparing ActiveMQ connection: host={} port={}",
                 activemq_host, activemq_port);
             activeMQConnector
               = new ExnConnector(activemq_host, activemq_port,
-                  activemq_user, activemq_password);
-        } else {
-            log.debug("ActiveMQ login info not set, only operating locally.");
+                  activemq_user, activemq_password, appId);
         }
         CountDownLatch exn_synchronizer = new CountDownLatch(1);
         if (activeMQConnector != null) {
-            log.debug("Starting connection to ActiveMQ");
+            log.info("Starting connection to ActiveMQ");
             activeMQConnector.start(exn_synchronizer);
         } else {
-            log.error("ActiveMQ connector not initialized (no connection parameters passed?) so we're unresponsive. Will keep running to keep CI/CD happy but don't expect anything more from me.");
+            log.error("ActiveMQ connector not initialized (login / password not set?) so we're unresponsive. Will keep running to keep CI/CD happy but don't expect anything more from me.");
         }
         if (incomingTraceDirectory == null) {
             log.error("Trace directory not set, not watching for traces so the digital twin will not calibrate.");
@@ -139,7 +156,7 @@ public class Server implements Callable<Integer> {
             }
         } catch (IOException | InterruptedException e) {
             log.error("Unexpected error in file watcher process; terminating", e);
-	}
+        }
     }
 
     private void processFiles() {
@@ -155,7 +172,7 @@ public class Server implements Callable<Integer> {
                 // ignore; we terminate when running = false
             } catch (IOException e) {
                 log.warn("Error while reading trace file", e);
-	    }
+            }
         }
     }
 
