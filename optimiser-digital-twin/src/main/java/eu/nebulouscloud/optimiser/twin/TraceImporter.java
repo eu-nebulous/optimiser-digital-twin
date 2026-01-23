@@ -10,7 +10,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -76,7 +75,9 @@ public class TraceImporter implements Callable<Integer> {
      * @throws IOException if the file cannot be read
      */
     public static List<LogEntry> readLog(Path file) throws IOException {
-        return readLog(Files.lines(file).iterator());
+        try (BufferedReader lines = Files.newBufferedReader(file)) {
+            return readLog(lines);
+        }
     }
 
     /**
@@ -84,12 +85,15 @@ public class TraceImporter implements Callable<Integer> {
      * objects containing all well-formed trace entries.  Log entries are
      * well-formed if they are parseable as JSON and contain all required
      * attributes.
+     *
+     * @param logLines stream of lines; will not be closed by this method.
+     * @throws IOException 
      */
-    public static List<LogEntry> readLog(Iterator<String> logLines) {
+    public static List<LogEntry> readLog(BufferedReader logLines) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         ArrayList<LogEntry> log = new ArrayList<>();
-        while (logLines.hasNext()) {
-            String line = logLines.next();
+        String line;
+        while ((line = logLines.readLine()) != null) {
             JsonNode event;
             try {
                 event = mapper.readTree(line);
@@ -116,48 +120,39 @@ public class TraceImporter implements Callable<Integer> {
 
     /**
      * Import traces from a file into the default database.
-     * @throws IOException 
      */
     public static long storeLog(Path traceFile) throws IOException {
-        log.info("Note: default database location not implemented yet");
-        Iterator<String> lines = Files.lines(traceFile).iterator();
-        List<LogEntry> entries = readLog(lines);
-        return entries.size();
+        // TODO implement
+        log.error("Note: default database location not implemented yet");
+        return -1;
     }
 
     /**
-     * Import traces from a file into a database.
+     * Import traces in JSONL format into a database.  Note that this method
+     * does not clear the database before importing.
      *
-     * @param dbFile the database to import into.
+     * @param dbFile the database to import into
      * @param traceFile the file containing log entries in JSONL format.
-     * @return the number of trace events imported.
-     */
-    public static long storeLog(Path dbFile, Path traceFile) throws IOException, SQLException {
-        log.info("Reading log {} into database {}", traceFile, dbFile);
-        Iterator<String> lines = Files.lines(traceFile).iterator();
-        return storeLog(dbFile, readLog(lines));
-    }
-
-    /**
-     * Import traces into a database.
-     */
-    public static long storeLog(Path dbFile, BufferedReader traceFile) throws IOException, SQLException {
-        Iterator<String> lines = traceFile.lines().iterator();
-        return storeLog(dbFile, readLog(lines));
-    }
-
-    /**
-     * Import traces in JSONL format into a database.
-     *
-     * @param dbFile the database to import into.
-     * @param logLines an iterator producing lines of log entries in jsonl format
      * @return the number of trace events imported
      * @throws SQLException
      * @throws IOException
      */
-    public static long storeLog(Path dbFile, List<LogEntry> events) throws SQLException, IOException {
+    public static long storeLog(Path dbFile, Path traceFile) throws IOException, SQLException {
+        log.info("Reading log {} into database {}", traceFile, dbFile);
+        try (BufferedReader lines = Files.newBufferedReader(traceFile)) {
+            return storeLog(dbFile, lines);
+        }
+    }
+
+    /**
+     * Import traces in JSONL format into a database.  This method exists
+     * mostly for the benefit of our unit tests.  {@see
+     * TraceImporter#storeLog(Path, Path))}.
+     */
+    public static long storeLog(Path dbFile, BufferedReader lines) throws IOException, SQLException {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile);
-             Statement statement = connection.createStatement()) {
+             Statement statement = connection.createStatement())
+        {
             statement.executeUpdate("""
                 CREATE TABLE IF NOT EXISTS trace_events(
                   local_name STRING,
@@ -173,22 +168,44 @@ public class TraceImporter implements Callable<Integer> {
                        event_type, event_time, payload_size)
                      VALUES (?, ?, ?, ?,
                        ?, MAX(0, ?), MAX(0, ?))
-                     """)) {
+                     """))
+            {
+                // Perform inserts in a transaction: reduces execution time
+                // from 25min to 5s for 235MB of logs
+                connection.setAutoCommit(false);
                 long nInserts = 0;
-                for (LogEntry event : events) {
-                    insert.setString(1, event.CompName());
-                    insert.setString(2, event.ReplicaID());
-                    insert.setString(3, event.RemoteCompName());
-                    insert.setString(4, event.ActivityID());
-                    insert.setString(5, event.EventType().toString());
-                    insert.setLong(6, event.EventTime());
-                    insert.setLong(7, event.PayloadSize());
-                    insert.addBatch();
-                    nInserts = nInserts + 1;
-                    if (nInserts % 10000 == 0) insert.executeBatch();
+                String line;
+                ObjectMapper mapper = new ObjectMapper();
+                while ((line = lines.readLine()) != null) {
+                    JsonNode event;
+                    try {
+                        event = mapper.readTree(line);
+                    } catch (JsonProcessingException e) {
+                        // random log line that's not in json format
+                        continue;
+                    }
+                    if (!isEventWellformed(event)) {
+                        // random json log line that's not a trace event
+                        continue;
+                    } else {
+                        insert.setString(1, event.at("/CompName").asText());
+                        insert.setString(2, event.at("/ReplicaID").asText());
+                        insert.setString(3, event.at("/RemoteCompName").asText());
+                        insert.setString(4, event.at("/ActivityID").asText());
+                        insert.setString(5, event.at("/EventType").asText());
+                        insert.setLong(6, event.at("/EventTime").asLong());
+                        insert.setLong(7, event.at("/PayloadSize").asLong());
+                        insert.addBatch();
+                        nInserts = nInserts + 1;
+                        if (nInserts % 10000 == 0) insert.executeBatch();
+                    }
                 }
                 insert.executeBatch();
+                connection.commit();
                 return nInserts;
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
             }
         }
     }
